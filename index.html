@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>離線票券管家 Fresh (Wallet UI)</title>
+    <title>離線票券管家 Fresh (Simple UI)</title>
 
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -102,7 +102,8 @@
             LayoutDashboard, Moon, Sun, ChevronUp, ChevronDown, Filter, AlertOctagon, CheckSquareIcon,
             Bell, BellRing, Send, UserCheck, CloudCog, Maximize2, Wand2, WifiOff, FileUp, Replace, FilePlus2, RefreshCw,
             ImagePlus, Heart, HeartHandshake, Eye, EyeOff, Globe, BookOpen, Star, History, MousePointerClick, Layers,
-            CalendarX2, CopyPlus, Lightbulb, Loader2, QrCode, SlidersHorizontal, ArrowUpDown, Image, CheckCheck, SendHorizontal, XCircle
+            CalendarX2, CopyPlus, Lightbulb, Loader2, QrCode, SlidersHorizontal, ArrowUpDown, Image, CheckCheck, SendHorizontal, XCircle,
+            Maximize
         } from 'lucide-react';
 
         // --- 1. Core Logic (Helpers) ---
@@ -194,24 +195,21 @@
                 const data = await response.json();
                 
                 if (data.ok) {
-                    console.log("TG Notification sent successfully");
                     return { success: true };
                 } else {
-                    console.error("TG API Error:", data);
                     return { success: false, error: data.description };
                 }
             } catch (error) {
-                console.error("TG Network Error:", error);
                 return { success: false, error: error.message };
             }
         };
 
         // --- 2. UI Components ---
 
-        const QRCodeCanvas = ({ text, size = 180 }) => {
+        const QRCodeCanvas = ({ text, size = 256 }) => {
             const canvasRef = useRef(null);
             useEffect(() => { if (canvasRef.current && window.QRious) new window.QRious({ element: canvasRef.current, value: text, size: size, level: 'H' }); }, [text, size]);
-            return <canvas ref={canvasRef} className="rounded-2xl shadow-sm border border-slate-100" />;
+            return <canvas ref={canvasRef} className="rounded-lg" />;
         };
 
         const BarcodeCanvas = ({ text }) => {
@@ -395,8 +393,6 @@
 
         const TicketCard = ({ ticket, onClick, notifyDays, isSelectionMode, isSelected, onSelect, isDuplicate }) => {
             const isExpiring = !ticket.completed && ticket.expiry && checkIsExpiringSoon(ticket.expiry, notifyDays);
-            
-            // 3. Duplicate Style: Red border for duplicates
             const duplicateStyle = isDuplicate && !ticket.completed && !ticket.isDeleted 
                 ? 'border-red-500 ring-2 ring-red-100 shadow-red-200' 
                 : '';
@@ -417,7 +413,6 @@
                         </div>
                     )}
                     
-                    {/* Duplicate Indicator Label */}
                     {isDuplicate && !ticket.completed && !ticket.isDeleted && (
                         <div className="absolute top-0 left-0 bg-red-500 text-white text-[9px] px-2 py-0.5 rounded-br-lg z-20 font-bold">
                             重複序號
@@ -513,118 +508,115 @@
             const displayImage = showOriginalImage || forceShowImage;
 
             return (
-                <div className="fixed inset-0 bg-slate-900/80 z-50 flex items-center justify-center sm:p-4 animate-fade-in backdrop-blur-md" onClick={onClose}>
-                    {/* Changed: Full screen on mobile, card on desktop */}
-                    <div className="bg-white w-full h-full sm:h-auto sm:max-h-[90vh] sm:max-w-md sm:rounded-[32px] shadow-2xl overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+                <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 animate-fade-in backdrop-blur-md" onClick={onClose}>
+                    <div className="bg-white w-full max-w-md rounded-[32px] p-8 relative shadow-2xl flex flex-col justify-between overflow-y-auto max-h-[95vh] border border-white/20 min-h-[500px]" onClick={e => e.stopPropagation()}>
                         
-                        {/* Header: Title and Close Button */}
-                        <div className="px-6 pt-6 pb-2 flex justify-between items-start shrink-0">
-                             {isEditing ? (
-                                <input className="text-xl font-black w-full border-b border-sky-200 pb-2 mr-4 text-slate-800 focus:outline-none focus:border-sky-500" value={editName} onChange={e=>setEditName(e.target.value)} />
-                             ) : (
-                                <h3 className="text-2xl font-black text-slate-800 break-words leading-tight mr-4">{ticket.productName}</h3>
-                             )}
-                             <button onClick={onClose} className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors shrink-0">
-                                <X size={20}/>
-                             </button>
+                        {/* 1. Header: Name and Serial (Small) */}
+                        <div className="text-center">
+                            {isEditing ? (
+                                <input className="text-lg font-bold text-center w-full border-b border-sky-200 pb-1 mb-1 text-slate-800 outline-none" value={editName} onChange={e=>setEditName(e.target.value)} />
+                            ) : (
+                                <>
+                                    <h3 className="text-lg font-bold text-slate-800 line-clamp-2 leading-tight mb-1">{ticket.productName}</h3>
+                                    <div className="font-mono text-sm text-slate-500 font-medium tracking-wide flex items-center justify-center gap-1 cursor-pointer hover:text-sky-500 transition-colors"
+                                         onClick={() => {if(ticket.serial) {navigator.clipboard.writeText(ticket.serial); alert('已複製序號');}}}>
+                                        {ticket.serial || '無序號'}
+                                        {ticket.serial && <Copy size={12} />}
+                                    </div>
+                                </>
+                            )}
                         </div>
 
-                        {/* Scrollable Content Area */}
-                        <div className="flex-1 overflow-y-auto px-6 py-2 no-scrollbar">
-                            
-                            {isEditing ? (
-                                <div className="mt-2 space-y-4 bg-slate-50 p-4 rounded-2xl">
-                                    {/* Image Editor */}
-                                    <div>
-                                        <label className="text-xs font-bold text-slate-400 uppercase">更換封面</label>
-                                        <div className="flex items-center gap-3 mt-2">
-                                            {editImage ? <img src={editImage} className="w-16 h-16 object-cover rounded-xl border border-slate-200"/> : <div className="w-16 h-16 bg-white border border-dashed border-slate-300 rounded-xl flex items-center justify-center"><ImageIcon size={20} className="text-slate-300"/></div>}
-                                            <div className="flex flex-col gap-2">
-                                                <label className="px-3 py-1.5 bg-sky-100 text-sky-600 text-xs font-bold rounded-lg cursor-pointer hover:bg-sky-200 text-center">
-                                                    上傳 <input type="file" accept="image/*" onChange={handleImageChange} className="hidden"/>
-                                                </label>
-                                                {editImage && <button onClick={()=>setEditImage('')} className="text-red-500 text-xs font-bold hover:underline">移除圖片</button>}
-                                            </div>
-                                        </div>
+                        {/* 2. Main Content: Big QR Code or Image */}
+                        <div className="flex-1 flex flex-col items-center justify-center my-6 relative min-h-[250px]">
+                             {isEditing ? (
+                                <div className="w-full space-y-4 bg-slate-50 p-4 rounded-2xl">
+                                    <label className="block text-center text-xs font-bold text-slate-400">更換圖片</label>
+                                    <div className="flex justify-center">
+                                        {editImage ? <img src={editImage} className="w-32 h-32 object-contain rounded-lg bg-white shadow-sm"/> : <div className="w-32 h-32 bg-white border border-dashed rounded-lg flex items-center justify-center"><ImageIcon className="text-slate-300"/></div>}
                                     </div>
-
-                                    <div>
-                                        <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">標籤</label>
-                                        <TagSelectInput allTags={allTags} selectedTags={editTags} onTagsChange={setEditTags} />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">期限</label>
-                                        <input type="date" value={editExpiry ? editExpiry.replace(/\//g, '-') : ''} onChange={e=>setEditExpiry(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-white" />
-                                    </div>
+                                     <label className="block text-center px-4 py-2 bg-sky-100 text-sky-600 rounded-lg text-sm font-bold cursor-pointer">
+                                        上傳新圖片 <input type="file" className="hidden" accept="image/*" onChange={handleImageChange}/>
+                                    </label>
+                                    <input type="date" value={editExpiry ? editExpiry.replace(/\//g, '-') : ''} onChange={e=>setEditExpiry(e.target.value)} className="w-full border p-2 rounded-xl text-sm" />
                                 </div>
-                            ) : (
-                                <div className="my-4 flex flex-col items-center gap-4">
+                             ) : (
+                                <>
+                                    {/* Toggle for original image if available */}
                                     {hasSerial && hasImage && (
-                                        <div className="flex bg-slate-100 p-1 rounded-xl w-full">
-                                            <button onClick={()=>setShowOriginalImage(false)} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${!showOriginalImage ? 'bg-white shadow-sm text-slate-800' : 'text-slate-400 hover:text-slate-600'}`}>顯示條碼</button>
-                                            <button onClick={()=>setShowOriginalImage(true)} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${showOriginalImage ? 'bg-white shadow-sm text-slate-800' : 'text-slate-400 hover:text-slate-600'}`}>原始圖片</button>
+                                        <div className="absolute top-0 right-0 z-10">
+                                            <button onClick={()=>setShowOriginalImage(!showOriginalImage)} className="bg-slate-100 p-2 rounded-full text-slate-500 hover:bg-slate-200 transition-colors shadow-sm">
+                                                {showOriginalImage ? <ScanBarcode size={18}/> : <Image size={18}/>}
+                                            </button>
                                         </div>
                                     )}
 
                                     {displayImage && hasImage ? (
-                                         <div className="relative group w-full flex justify-center">
-                                             {/* Changed: Full width, auto height to preserve aspect ratio */}
-                                             <img src={ticket.image} className="w-full h-auto rounded-xl shadow-sm border border-slate-100" />
-                                             <a href={ticket.image} download={`ticket_${ticket.productName}`} className="absolute bottom-3 right-3 bg-slate-900/60 text-white p-2 rounded-lg hover:bg-slate-900/80 backdrop-blur-sm shadow-md"><Download size={16}/></a>
+                                         <div className="w-full flex justify-center">
+                                             <img src={ticket.image} className="w-full h-auto max-h-[500px] object-contain rounded-lg shadow-sm" />
                                          </div>
                                     ) : (
-                                        <div className="w-full bg-slate-50 p-6 rounded-[24px] border border-slate-100 flex flex-col items-center shadow-inner">
-                                            {ticket.serial && <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm mb-4 w-full flex justify-center"><BarcodeCanvas text={ticket.serial} /></div>}
-                                            <div className="p-4 bg-white rounded-2xl shadow-sm border border-slate-100">
-                                                {ticket.serial ? <QRCodeCanvas text={ticket.serial} /> : <div className="w-40 h-40 flex items-center justify-center text-slate-300 font-bold border-2 border-dashed border-slate-100 rounded-xl">無條碼</div>}
-                                            </div>
+                                        // Big QR Code
+                                        <div className="flex flex-col items-center gap-4 w-full">
+                                            {ticket.serial ? (
+                                                <div className="p-4 bg-white rounded-3xl shadow-sm border border-slate-50">
+                                                    <QRCodeCanvas text={ticket.serial} size={250} />
+                                                </div>
+                                            ) : (
+                                                <div className="w-64 h-64 bg-slate-50 rounded-3xl flex items-center justify-center text-slate-300 font-bold border-2 border-dashed border-slate-200">
+                                                    無 QR Code
+                                                </div>
+                                            )}
                                         </div>
                                     )}
-
-                                    <div className="text-center w-full mt-2">
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">兌換序號</p>
-                                        <div className="text-2xl font-mono font-black text-slate-800 tracking-wider select-all cursor-pointer bg-slate-50 px-4 py-4 rounded-2xl border border-slate-200/60 shadow-sm flex items-center justify-center gap-3 group hover:border-sky-300 transition-colors"
-                                           onClick={() => {if(ticket.serial) {navigator.clipboard.writeText(ticket.serial); alert('已複製');}}}>
-                                            {ticket.serial || '無序號'} 
-                                            {ticket.serial && <Copy size={20} className="text-slate-300 group-hover:text-sky-500"/>}
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
+                                </>
+                             )}
                         </div>
 
-                        {/* Footer Buttons Fixed at Bottom */}
-                        <div className="p-6 border-t border-slate-100 bg-white shrink-0 flex flex-col gap-3">
+                        {/* 3. Footer: Redeem Button & Secondary Actions */}
+                        <div className="mt-auto">
                             {isEditing ? (
-                                <div className="flex gap-3">
-                                    <button onClick={()=>setIsEditing(false)} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold hover:bg-slate-200">取消</button>
-                                    <button onClick={handleSave} className="flex-1 py-4 bg-sky-500 text-white rounded-2xl font-bold shadow-lg shadow-sky-200 hover:bg-sky-600">儲存變更</button>
+                                <div className="flex gap-2">
+                                     <button onClick={()=>setIsEditing(false)} className="flex-1 py-3 rounded-xl bg-slate-100 text-slate-500 font-bold">取消</button>
+                                     <button onClick={handleSave} className="flex-1 py-3 rounded-xl bg-sky-500 text-white font-bold shadow-lg shadow-sky-200">儲存</button>
                                 </div>
                             ) : (
-                                <>
+                                <div className="space-y-6">
+                                    {/* Main Redeem Button - Big and Green */}
                                     {!ticket.isDeleted && (
                                         <button 
                                             onClick={() => { onToggleComplete(ticket); onClose(); }} 
-                                            className={`w-full py-4 text-xl font-black rounded-2xl shadow-lg flex items-center justify-center gap-2 text-white transition-all active:scale-95 ${ticket.completed ? 'bg-emerald-500 shadow-emerald-200 hover:bg-emerald-600' : 'bg-emerald-500 shadow-emerald-200 hover:bg-emerald-600'}`}
+                                            className={`w-full py-4 text-xl font-black rounded-2xl shadow-xl flex items-center justify-center gap-2 text-white transition-all active:scale-95 ${ticket.completed ? 'bg-slate-400' : 'bg-emerald-500 shadow-emerald-200 hover:bg-emerald-600'}`}
                                         >
                                             {ticket.completed ? <><RotateCcw size={24}/> 標記為未用</> : <><CheckCircle2 size={24}/> 立即核銷</>}
                                         </button>
                                     )}
-                                    <div className="flex gap-3">
-                                        {ticket.isDeleted ? (
-                                            <button onClick={() => { onRestore(ticket); onClose(); }} className="flex-1 py-3 bg-emerald-50 text-emerald-600 font-bold rounded-2xl flex items-center justify-center gap-2 hover:bg-emerald-100">
-                                                <RefreshCcw size={18}/> 還原
+
+                                    {/* Secondary Actions Row (Minimalist) */}
+                                    <div className="flex justify-center items-center gap-6 text-slate-400">
+                                        <button onClick={() => setIsEditing(true)} className="flex flex-col items-center gap-1 hover:text-sky-500 transition-colors">
+                                            <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center"><Pencil size={18}/></div>
+                                            <span className="text-[10px] font-bold">編輯</span>
+                                        </button>
+                                        
+                                        {!ticket.isDeleted ? (
+                                            <button onClick={() => { if(confirm('確認移至回收桶？')) { onDelete(ticket.id); onClose(); } }} className="flex flex-col items-center gap-1 hover:text-red-500 transition-colors">
+                                                 <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center"><Trash2 size={18}/></div>
+                                                 <span className="text-[10px] font-bold">刪除</span>
                                             </button>
                                         ) : (
-                                            <button onClick={() => setIsEditing(true)} className="flex-1 py-3 bg-slate-50 text-slate-600 font-bold rounded-2xl flex items-center justify-center gap-2 hover:bg-slate-100 border border-slate-100">
-                                                <Pencil size={18}/> 編輯
+                                            <button onClick={() => { onRestore(ticket); onClose(); }} className="flex flex-col items-center gap-1 hover:text-emerald-500 transition-colors">
+                                                 <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center"><RefreshCcw size={18}/></div>
+                                                 <span className="text-[10px] font-bold">還原</span>
                                             </button>
                                         )}
-                                        <button onClick={() => { onDelete(ticket.id); onClose(); }} className="flex-1 py-3 bg-red-50 text-red-500 font-bold rounded-2xl flex items-center justify-center gap-2 hover:bg-red-100 border border-red-50">
-                                            <Trash2 size={18}/> {ticket.isDeleted ? '永久刪除' : '刪除'}
+
+                                        <button onClick={onClose} className="flex flex-col items-center gap-1 hover:text-slate-600 transition-colors">
+                                             <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center"><X size={18}/></div>
+                                             <span className="text-[10px] font-bold">關閉</span>
                                         </button>
                                     </div>
-                                </>
+                                </div>
                             )}
                         </div>
                     </div>
@@ -850,7 +842,6 @@
                 });
                 
                 result.sort((a, b) => {
-                    // 3. Sort Logic: Duplicates first (only in active/completed view usually, but doing global)
                     const isDupA = duplicateSerials.has(a.serial) && !a.completed && !a.isDeleted;
                     const isDupB = duplicateSerials.has(b.serial) && !b.completed && !b.isDeleted;
                     if (isDupA !== isDupB) return isDupA ? -1 : 1;
@@ -1058,5 +1049,4 @@
     </script>
 </body>
 </html>
-
 
