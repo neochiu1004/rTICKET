@@ -797,7 +797,8 @@
                                 let msg = `⚠️ *[${settings.appTitle}] 到期提醒 (${expiring.length}筆)*\n設定: ${settings.notifyDays} 天內\n\n`;
                                 expiring.slice(0, 10).forEach(t => {
                                     const tagStr = t.tags && t.tags.length > 0 ? ` [${t.tags.join(', ')}]` : '';
-                                    msg += `🔸 ${t.productName} (${t.expiry})${tagStr}\n`;
+                                    const serialInfo = t.serial ? ` (序號: ${t.serial})` : '';
+                                    msg += `🔸 ${t.productName} (${t.expiry})${serialInfo}${tagStr}\n`;
                                 });
                                 if(expiring.length > 10) msg += `...等共 ${expiring.length} 筆`;
                                 const result = await sendTelegramMessage(settings.tgToken, settings.tgChatId, msg);
@@ -847,7 +848,8 @@
                 // Trigger TG Notification if marking as COMPLETED (Redeemed)
                 if (newStatus && settings.tgToken && settings.tgChatId) {
                    const tagStr = ticket.tags && ticket.tags.length > 0 ? ` [${ticket.tags.join(', ')}]` : '';
-                   const msg = `✅ *[已核銷]* ${ticket.productName}\n📅 期限: ${ticket.expiry || '無'}${tagStr}`;
+                   const serialStr = ticket.serial ? `\n🔢 序號: \`${ticket.serial}\`` : '';
+                   const msg = `✅ *[已核銷]* ${ticket.productName}\n📅 期限: ${ticket.expiry || '無'}${serialStr}${tagStr}`;
                    // Fire and forget, don't await blocking UI
                    sendTelegramMessage(settings.tgToken, settings.tgChatId, msg).catch(e => console.error(e));
                 }
