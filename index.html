@@ -179,6 +179,13 @@
             return diffDays <= thresholdDays && diffDays >= -1; 
         };
 
+        const formatTime = (timestamp) => {
+            if(!timestamp) return '';
+            const d = new Date(timestamp);
+            if(isNaN(d.getTime())) return '';
+            return `${d.getFullYear()}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getDate().toString().padStart(2,'0')} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+        };
+
         // Improved TG Sender (GET request for better compatibility)
         const sendTelegramMessage = async (token, chatId, text) => {
             if (!token || !chatId) return { success: false, error: 'Missing token or chat_id' };
@@ -441,9 +448,16 @@
                         </div>
                         
                         <div className="flex justify-between items-end mt-2">
-                            <div className={`text-xs font-bold flex items-center gap-1.5 ${isExpiring ? 'text-red-500' : 'text-slate-400'}`}>
-                                <Clock size={12}/> <span>{ticket.expiry || '無期限'}</span>
-                            </div>
+                            {ticket.completed && ticket.completedAt ? (
+                                <div className="text-[10px] font-bold text-emerald-600 flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded-lg">
+                                    <CheckCircle2 size={10}/> <span>核銷於 {formatTime(ticket.completedAt)}</span>
+                                </div>
+                            ) : (
+                                <div className={`text-xs font-bold flex items-center gap-1.5 ${isExpiring ? 'text-red-500' : 'text-slate-400'}`}>
+                                    <Clock size={12}/> <span>{ticket.expiry || '無期限'}</span>
+                                </div>
+                            )}
+
                             {!isSelectionMode && (
                                 <button className={`text-xs font-bold px-3 py-1.5 rounded-full transition-colors ${ticket.completed ? 'bg-slate-100 text-slate-500' : 'bg-orange-50 text-orange-600 group-hover:bg-orange-500 group-hover:text-white'}`}>
                                     {ticket.completed ? '查看' : '兌換'}
@@ -840,16 +854,19 @@
             const handleAddBatch = (newItems) => setTasks(prev => [...newItems, ...prev]);
             const handleUpdate = (updatedTicket) => setTasks(prev => prev.map(t => t.id === updatedTicket.id ? updatedTicket : t));
             
-            // --- MODIFIED: Handle Toggle Complete with Notification ---
+            // --- MODIFIED: Handle Toggle Complete with Notification & Timestamp ---
             const handleToggleComplete = async (ticket) => {
                 const newStatus = !ticket.completed;
-                setTasks(prev => prev.map(t => t.id === ticket.id ? { ...t, completed: newStatus } : t));
+                const completedAt = newStatus ? Date.now() : null; // Record timestamp
+
+                setTasks(prev => prev.map(t => t.id === ticket.id ? { ...t, completed: newStatus, completedAt: completedAt } : t));
                 
                 // Trigger TG Notification if marking as COMPLETED (Redeemed)
                 if (newStatus && settings.tgToken && settings.tgChatId) {
                    const tagStr = ticket.tags && ticket.tags.length > 0 ? ` [${ticket.tags.join(', ')}]` : '';
                    const serialStr = ticket.serial ? `\n🔢 序號: \`${ticket.serial}\`` : '';
-                   const msg = `✅ *[已核銷]* ${ticket.productName}\n📅 期限: ${ticket.expiry || '無'}${serialStr}${tagStr}`;
+                   const timeStr = `\n⏰ 時間: ${formatTime(completedAt)}`;
+                   const msg = `✅ *[已核銷]* ${ticket.productName}\n📅 期限: ${ticket.expiry || '無'}${serialStr}${timeStr}${tagStr}`;
                    // Fire and forget, don't await blocking UI
                    sendTelegramMessage(settings.tgToken, settings.tgChatId, msg).catch(e => console.error(e));
                 }
@@ -873,7 +890,7 @@
                         tgToken: settings.tgToken, 
                         tgChatId: settings.tgChatId, 
                         notifyDays: settings.notifyDays,
-                        appTitle: settings.appTitle
+                        appTitle: settings.appTitle // CONFIRMED: appTitle is included in backup
                     },
                     tasks: tasks
                 };
@@ -893,8 +910,8 @@
                             
                             let confirmSettings = false;
                             if (!Array.isArray(data) && data.settings) {
-                                if (confirm("備份檔包含設定資料 (Telegram Token 等)，是否一併還原？")) {
-                                    setSettings(prev => ({...prev, ...data.settings}));
+                                if (confirm("備份檔包含設定資料 (APP標題、Telegram Token 等)，是否一併還原？")) {
+                                    setSettings(prev => ({...prev, ...data.settings})); // CONFIRMED: restores appTitle
                                     confirmSettings = true;
                                 }
                             }
