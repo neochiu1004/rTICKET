@@ -179,11 +179,22 @@
             return diffDays <= thresholdDays && diffDays >= -1; 
         };
 
+        // Date Only
         const formatTime = (timestamp) => {
             if(!timestamp) return '';
             const d = new Date(timestamp);
             if(isNaN(d.getTime())) return '';
             return `${d.getFullYear()}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getDate().toString().padStart(2,'0')}`;
+        };
+
+        // Date and Time (HH:mm)
+        const formatDateTime = (timestamp) => {
+            if(!timestamp) return '';
+            const d = new Date(timestamp);
+            if(isNaN(d.getTime())) return '';
+            const datePart = `${d.getFullYear()}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getDate().toString().padStart(2,'0')}`;
+            const timePart = `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+            return `${datePart} ${timePart}`;
         };
 
         const sendTelegramMessage = async (token, chatId, text) => {
@@ -456,7 +467,7 @@
                         <div className="flex justify-between items-end mt-2">
                             {ticket.completed && ticket.completedAt ? (
                                 <div className="text-[10px] font-bold text-emerald-600 flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded-lg">
-                                    <CheckCircle2 size={10}/> <span>核銷於 {formatTime(ticket.completedAt)}</span>
+                                    <CheckCircle2 size={10}/> <span>核銷於 {formatDateTime(ticket.completedAt)}</span>
                                 </div>
                             ) : (
                                 <div className={`text-xs font-bold flex items-center gap-1.5 ${isExpiring ? 'text-red-500' : 'text-slate-400'}`}>
@@ -873,7 +884,8 @@
                 if (newStatus && settings.tgToken && settings.tgChatId) {
                    const tagStr = ticket.tags && ticket.tags.length > 0 ? ` [${ticket.tags.join(', ')}]` : '';
                    const serialStr = ticket.serial ? `\n🔢 序號: \`${ticket.serial}\`` : '';
-                   const timeStr = `\n⏰ 時間: ${formatTime(completedAt)}`;
+                   // Changed: Use formatDateTime to include HH:mm
+                   const timeStr = `\n⏰ 時間: ${formatDateTime(completedAt)}`;
                    const msg = `✅ *[已核銷]* ${ticket.productName}\n📅 期限: ${ticket.expiry || '無'}${serialStr}${timeStr}${tagStr}`;
                    sendTelegramMessage(settings.tgToken, settings.tgChatId, msg).catch(e => console.error(e));
                 }
