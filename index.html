@@ -102,7 +102,7 @@
             LayoutDashboard, Moon, Sun, ChevronUp, ChevronDown, Filter, AlertOctagon, CheckSquareIcon,
             Bell, BellRing, Send, UserCheck, CloudCog, Maximize2, Wand2, WifiOff, FileUp, Replace, FilePlus2, RefreshCw,
             ImagePlus, Heart, HeartHandshake, Eye, EyeOff, Globe, BookOpen, Star, History, MousePointerClick, Layers,
-            CalendarX2, CopyPlus, Lightbulb, Loader2, QrCode, SlidersHorizontal, ArrowUpDown, Image, CheckCheck, SendHorizontal
+            CalendarX2, CopyPlus, Lightbulb, Loader2, QrCode, SlidersHorizontal, ArrowUpDown, Image, CheckCheck, SendHorizontal, XCircle
         } from 'lucide-react';
 
         // --- 1. Core Logic (Helpers) ---
@@ -179,21 +179,19 @@
             return diffDays <= thresholdDays && diffDays >= -1; 
         };
 
+        // 1. Modified: Time format changed to yyyy/mm/dd as requested
         const formatTime = (timestamp) => {
             if(!timestamp) return '';
             const d = new Date(timestamp);
             if(isNaN(d.getTime())) return '';
-            return `${d.getFullYear()}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getDate().toString().padStart(2,'0')} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+            // Returns yyyy/mm/dd
+            return `${d.getFullYear()}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getDate().toString().padStart(2,'0')}`;
         };
 
-        // Improved TG Sender (GET request for better compatibility)
         const sendTelegramMessage = async (token, chatId, text) => {
             if (!token || !chatId) return { success: false, error: 'Missing token or chat_id' };
             try {
-                // Use EncodeURIComponent for text to handle special characters properly
                 const url = `https://api.telegram.org/bot${token}/sendMessage?chat_id=${chatId}&text=${encodeURIComponent(text)}&parse_mode=Markdown`;
-                
-                // Attempt GET request. Note: Browsers may block this due to CORS if strict.
                 const response = await fetch(url);
                 const data = await response.json();
                 
@@ -206,8 +204,6 @@
                 }
             } catch (error) {
                 console.error("TG Network Error:", error);
-                // In some cases (CORS), the request might actually succeed at the network level but the browser hides the response.
-                // However, without a proxy, this is the best we can do client-side.
                 return { success: false, error: error.message };
             }
         };
@@ -233,8 +229,8 @@
                 setInputVal('');
             };
             const handleRemove = (tag, e) => {
-                e.preventDefault(); // Prevent default behavior
-                e.stopPropagation(); // Stop event bubbling
+                e.preventDefault(); 
+                e.stopPropagation();
                 onTagsChange(selectedTags.filter(t => t !== tag));
             };
             return (
@@ -308,7 +304,6 @@
                                 <input type="text" value={localChatId} onChange={e => setLocalChatId(e.target.value)} placeholder="-123456789" className="w-full p-3 bg-slate-50 rounded-xl text-sm font-mono text-slate-600 outline-none focus:ring-2 focus:ring-sky-400"/>
                             </div>
                             
-                            {/* Test Button */}
                             <button onClick={handleTest} disabled={!localToken || !localChatId || testStatus === 'sending'} 
                                 className={`w-full py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${testStatus === 'success' ? 'bg-emerald-100 text-emerald-600' : testStatus === 'error' ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
                                 {testStatus === 'sending' ? <Loader2 size={14} className="animate-spin"/> : testStatus === 'success' ? <Check size={14}/> : <SendHorizontal size={14}/>}
@@ -400,9 +395,14 @@
             );
         };
 
-        const TicketCard = ({ ticket, onClick, notifyDays, isSelectionMode, isSelected, onSelect }) => {
+        const TicketCard = ({ ticket, onClick, notifyDays, isSelectionMode, isSelected, onSelect, isDuplicate }) => {
             const isExpiring = !ticket.completed && ticket.expiry && checkIsExpiringSoon(ticket.expiry, notifyDays);
             
+            // 3. Duplicate Style: Red border for duplicates
+            const duplicateStyle = isDuplicate && !ticket.completed && !ticket.isDeleted 
+                ? 'border-red-500 ring-2 ring-red-100 shadow-red-200' 
+                : '';
+
             return (
                 <div 
                     onClick={() => {
@@ -410,11 +410,19 @@
                         else onClick(ticket);
                     }}
                     className={`bg-white mx-4 mt-4 p-4 rounded-3xl shadow-sm border flex gap-4 active:scale-[0.98] transition-all cursor-pointer relative overflow-hidden group 
-                    ${isSelected ? 'ring-2 ring-sky-500 border-sky-500 bg-sky-50' : isExpiring ? 'border-red-400 shadow-red-100 bg-red-50/10' : 'border-slate-100 hover:border-sky-200 hover:shadow-md'}`}
+                    ${isSelected ? 'ring-2 ring-sky-500 border-sky-500 bg-sky-50' : isExpiring ? 'border-red-400 shadow-red-100 bg-red-50/10' : 'border-slate-100 hover:border-sky-200 hover:shadow-md'}
+                    ${duplicateStyle}`}
                 >
                     {isSelectionMode && (
                         <div className={`absolute top-3 right-3 z-20 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-sky-500 border-sky-500' : 'border-slate-300 bg-white'}`}>
                             {isSelected && <Check size={14} className="text-white"/>}
+                        </div>
+                    )}
+                    
+                    {/* Duplicate Indicator Label */}
+                    {isDuplicate && !ticket.completed && !ticket.isDeleted && (
+                        <div className="absolute top-0 left-0 bg-red-500 text-white text-[9px] px-2 py-0.5 rounded-br-lg z-20 font-bold">
+                            重複序號
                         </div>
                     )}
 
@@ -486,7 +494,7 @@
                     ...ticket,
                     productName: editName,
                     expiry: editExpiry.replace(/-/g, '/'),
-                    tags: editTags, // Ensure editTags is used even if empty
+                    tags: editTags, 
                     image: editImage,
                     images: editImage ? (ticket.images && ticket.images.includes(editImage) ? ticket.images : [editImage, ...(ticket.images || [])]) : ticket.images
                 });
@@ -509,11 +517,10 @@
             return (
                 <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 animate-fade-in backdrop-blur-md" onClick={onClose}>
                     <div className="bg-white w-full max-w-sm rounded-[32px] p-6 relative shadow-2xl overflow-y-auto max-h-[90vh] border border-white/20" onClick={e => e.stopPropagation()}>
-                        <button onClick={onClose} className="absolute top-4 right-4 w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors">
-                            <X size={16}/>
-                        </button>
+                        
+                        {/* 4. Removed top-right X button */}
 
-                        <div className="text-center mt-4">
+                        <div className="text-center mt-2">
                             {isEditing ? (
                                 <input className="text-xl font-black text-center w-full border-b border-sky-200 pb-2 mb-2 text-slate-800 focus:outline-none focus:border-sky-500" value={editName} onChange={e=>setEditName(e.target.value)} />
                             ) : (
@@ -605,11 +612,12 @@
                             ) : (
                                 <>
                                     {!ticket.isDeleted && (
+                                        // 2. Modified: Redeem button bigger (py-5, text-xl) and green
                                         <button 
                                             onClick={() => { onToggleComplete(ticket); onClose(); }} 
-                                            className={`w-full py-4 font-black rounded-2xl shadow-lg flex items-center justify-center gap-2 text-white transition-transform active:scale-95 ${ticket.completed ? 'bg-emerald-500 shadow-emerald-200 hover:bg-emerald-600' : 'bg-emerald-500 shadow-emerald-200 hover:bg-emerald-600'}`}
+                                            className={`w-full py-5 text-xl font-black rounded-2xl shadow-lg flex items-center justify-center gap-2 text-white transition-transform active:scale-95 ${ticket.completed ? 'bg-emerald-500 shadow-emerald-200 hover:bg-emerald-600' : 'bg-emerald-500 shadow-emerald-200 hover:bg-emerald-600'}`}
                                         >
-                                            {ticket.completed ? <><RotateCcw size={20}/> 標記為未用</> : <><CheckCircle2 size={20}/> 立即核銷</>}
+                                            {ticket.completed ? <><RotateCcw size={24}/> 標記為未用</> : <><CheckCircle2 size={24}/> 立即核銷</>}
                                         </button>
                                     )}
                                     <div className="flex gap-3 mt-2">
@@ -624,6 +632,11 @@
                                         )}
                                         <button onClick={() => { onDelete(ticket.id); onClose(); }} className="flex-1 py-3 bg-red-50 text-red-500 font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-red-100 border border-red-50">
                                             <Trash2 size={18}/> {ticket.isDeleted ? '永久刪除' : '刪除'}
+                                        </button>
+                                        
+                                        {/* 4. Added: Close Button next to other buttons */}
+                                        <button onClick={onClose} className="flex-1 py-3 bg-slate-100 text-slate-600 font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-slate-200 border border-slate-200">
+                                            <X size={18}/> 關閉
                                         </button>
                                     </div>
                                 </>
@@ -741,7 +754,6 @@
             );
         };
         
-        // --- 3. Batch Edit Modal ---
         const BatchEditModal = ({ isOpen, onClose, selectedCount, onAddTag, allTags }) => {
              const [tagsToAdd, setTagsToAdd] = useState([]);
              if(!isOpen) return null;
@@ -828,6 +840,17 @@
 
             const allTags = useMemo(() => [...new Set(tasks.flatMap(t => t.tags || []))], [tasks]);
 
+            // 3. Duplicate Logic: Identify duplicates
+            const duplicateSerials = useMemo(() => {
+                const counts = {};
+                tasks.forEach(t => {
+                    if (!t.isDeleted && t.serial) {
+                        counts[t.serial] = (counts[t.serial] || 0) + 1;
+                    }
+                });
+                return new Set(Object.keys(counts).filter(s => counts[s] > 1));
+            }, [tasks]);
+
             const filteredTasks = useMemo(() => {
                 let result = tasks.filter(t => {
                     if (view === 'active' && (t.completed || t.isDeleted)) return false;
@@ -840,7 +863,13 @@
                     }
                     return true;
                 });
+                
                 result.sort((a, b) => {
+                    // 3. Sort Logic: Duplicates first (only in active/completed view usually, but doing global)
+                    const isDupA = duplicateSerials.has(a.serial) && !a.completed && !a.isDeleted;
+                    const isDupB = duplicateSerials.has(b.serial) && !b.completed && !b.isDeleted;
+                    if (isDupA !== isDupB) return isDupA ? -1 : 1;
+
                     if (sortType === 'expiring') {
                         const dateA = a.expiry ? new Date(a.expiry.replace(/\//g, '-')) : new Date(9999, 11, 31);
                         const dateB = b.expiry ? new Date(b.expiry.replace(/\//g, '-')) : new Date(9999, 11, 31);
@@ -849,25 +878,22 @@
                     else return a.createdAt - b.createdAt;
                 });
                 return result;
-            }, [tasks, view, activeTag, searchQuery, sortType]);
+            }, [tasks, view, activeTag, searchQuery, sortType, duplicateSerials]);
 
             const handleAddBatch = (newItems) => setTasks(prev => [...newItems, ...prev]);
             const handleUpdate = (updatedTicket) => setTasks(prev => prev.map(t => t.id === updatedTicket.id ? updatedTicket : t));
             
-            // --- MODIFIED: Handle Toggle Complete with Notification & Timestamp ---
             const handleToggleComplete = async (ticket) => {
                 const newStatus = !ticket.completed;
-                const completedAt = newStatus ? Date.now() : null; // Record timestamp
+                const completedAt = newStatus ? Date.now() : null; 
 
                 setTasks(prev => prev.map(t => t.id === ticket.id ? { ...t, completed: newStatus, completedAt: completedAt } : t));
                 
-                // Trigger TG Notification if marking as COMPLETED (Redeemed)
                 if (newStatus && settings.tgToken && settings.tgChatId) {
                    const tagStr = ticket.tags && ticket.tags.length > 0 ? ` [${ticket.tags.join(', ')}]` : '';
                    const serialStr = ticket.serial ? `\n🔢 序號: \`${ticket.serial}\`` : '';
                    const timeStr = `\n⏰ 時間: ${formatTime(completedAt)}`;
                    const msg = `✅ *[已核銷]* ${ticket.productName}\n📅 期限: ${ticket.expiry || '無'}${serialStr}${timeStr}${tagStr}`;
-                   // Fire and forget, don't await blocking UI
                    sendTelegramMessage(settings.tgToken, settings.tgChatId, msg).catch(e => console.error(e));
                 }
             };
@@ -881,7 +907,6 @@
                 if(confirm(`刪除標籤 "${tag}"？`)) setTasks(prev => prev.map(t => ({ ...t, tags: (t.tags||[]).filter(tt => tt !== tag) })));
             };
             
-            // Backup with Settings
             const handleBackup = () => {
                 const backupData = {
                     version: 3,
@@ -890,7 +915,7 @@
                         tgToken: settings.tgToken, 
                         tgChatId: settings.tgChatId, 
                         notifyDays: settings.notifyDays,
-                        appTitle: settings.appTitle // CONFIRMED: appTitle is included in backup
+                        appTitle: settings.appTitle
                     },
                     tasks: tasks
                 };
@@ -898,7 +923,6 @@
                 const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `ticket_backup_full_${new Date().toISOString().split('T')[0]}.json`; a.click();
             };
             
-            // --- MODIFIED: Import with Add/Overwrite Option ---
             const handleImport = () => {
                 const input = document.createElement('input'); input.type = 'file';
                 input.onchange = e => {
@@ -911,26 +935,22 @@
                             let confirmSettings = false;
                             if (!Array.isArray(data) && data.settings) {
                                 if (confirm("備份檔包含設定資料 (APP標題、Telegram Token 等)，是否一併還原？")) {
-                                    setSettings(prev => ({...prev, ...data.settings})); // CONFIRMED: restores appTitle
+                                    setSettings(prev => ({...prev, ...data.settings}));
                                     confirmSettings = true;
                                 }
                             }
                             
-                            // Prompt for Import Mode
                             const mode = prompt("請選擇匯入模式：\n1. 添加 (保留現有資料並新增)\n2. 覆蓋 (清空現有資料後匯入)", "1");
                             
                             if (mode === '1') {
-                                // Add/Merge Mode
                                 setTasks(prev => [...prev, ...importedTasks]);
                                 alert(`匯入成功 (添加模式)！新增 ${importedTasks.length} 筆票券${confirmSettings ? ' (含設定)' : ''}`);
                             } else if (mode === '2') {
-                                // Overwrite Mode
                                 if(confirm("確定要覆蓋嗎？現有資料將會遺失！")) {
                                     setTasks(importedTasks);
                                     alert(`匯入成功 (覆蓋模式)！共 ${importedTasks.length} 筆票券${confirmSettings ? ' (含設定)' : ''}`);
                                 }
                             } else {
-                                // Cancelled or Invalid
                                 if(mode !== null) alert("取消匯入");
                             }
 
@@ -940,7 +960,6 @@
                 }; input.click();
             };
             
-            // Selection Logic
             const handleSelect = (id) => {
                 const newSet = new Set(selectedIds);
                 if(newSet.has(id)) newSet.delete(id); else newSet.add(id);
@@ -993,6 +1012,7 @@
                                     key={ticket.id} ticket={ticket} 
                                     onClick={setSelectedTicket} notifyDays={settings.notifyDays}
                                     isSelectionMode={isSelectionMode} isSelected={selectedIds.has(ticket.id)} onSelect={handleSelect}
+                                    isDuplicate={duplicateSerials.has(ticket.serial)}
                                 />
                             ))
                         ) : (
