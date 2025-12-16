@@ -179,12 +179,10 @@
             return diffDays <= thresholdDays && diffDays >= -1; 
         };
 
-        // 1. Modified: Time format changed to yyyy/mm/dd as requested
         const formatTime = (timestamp) => {
             if(!timestamp) return '';
             const d = new Date(timestamp);
             if(isNaN(d.getTime())) return '';
-            // Returns yyyy/mm/dd
             return `${d.getFullYear()}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getDate().toString().padStart(2,'0')}`;
         };
 
@@ -516,10 +514,9 @@
 
             return (
                 <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 animate-fade-in backdrop-blur-md" onClick={onClose}>
-                    <div className="bg-white w-full max-w-sm rounded-[32px] p-6 relative shadow-2xl overflow-y-auto max-h-[90vh] border border-white/20" onClick={e => e.stopPropagation()}>
+                    {/* Modified: Increased max-w to md for wider view, removed max-h constraint slightly if needed but keep auto for image */}
+                    <div className="bg-white w-full max-w-md rounded-[32px] p-6 relative shadow-2xl overflow-y-auto max-h-[90vh] border border-white/20" onClick={e => e.stopPropagation()}>
                         
-                        {/* 4. Removed top-right X button */}
-
                         <div className="text-center mt-2">
                             {isEditing ? (
                                 <input className="text-xl font-black text-center w-full border-b border-sky-200 pb-2 mb-2 text-slate-800 focus:outline-none focus:border-sky-500" value={editName} onChange={e=>setEditName(e.target.value)} />
@@ -527,7 +524,7 @@
                                 <h3 className="text-xl font-black text-slate-800 break-words leading-tight">{ticket.productName}</h3>
                             )}
                             
-                            {isEditing ? (
+                            {isEditing && (
                                 <div className="mt-4 text-left space-y-4 bg-slate-50 p-4 rounded-2xl">
                                     {/* Image Editor */}
                                     <div>
@@ -552,12 +549,6 @@
                                         <input type="date" value={editExpiry ? editExpiry.replace(/\//g, '-') : ''} onChange={e=>setEditExpiry(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-white" />
                                     </div>
                                 </div>
-                            ) : (
-                                <div className="flex justify-center gap-2 mt-3 flex-wrap">
-                                    {ticket.tags && ticket.tags.map(t => (
-                                        <span key={t} className="text-xs font-bold bg-slate-100 text-slate-500 px-2.5 py-1 rounded-lg">#{t}</span>
-                                    ))}
-                                </div>
                             )}
                         </div>
 
@@ -572,7 +563,8 @@
 
                                 {displayImage && hasImage ? (
                                      <div className="relative group w-full flex justify-center">
-                                         <img src={ticket.image} className="max-w-full max-h-[300px] object-contain rounded-xl shadow-sm border border-white" />
+                                         {/* Modified: Removed max-h-[300px] and object-contain to allow full size image per request */}
+                                         <img src={ticket.image} className="w-full h-auto rounded-xl shadow-sm border border-white" />
                                          <a href={ticket.image} download={`ticket_${ticket.productName}`} className="absolute bottom-3 right-3 bg-slate-900/60 text-white p-1.5 rounded-lg hover:bg-slate-900/80 backdrop-blur-sm"><Download size={14}/></a>
                                      </div>
                                 ) : (
@@ -595,13 +587,7 @@
                             </div>
                         )}
 
-                        {!isEditing && ticket.note && (
-                            <div className="bg-amber-50 p-4 rounded-2xl mb-6 text-sm text-slate-600 border border-amber-100 relative">
-                                <StickyNote size={16} className="absolute top-3 right-3 text-amber-300"/>
-                                <p className="font-bold text-amber-600 text-xs mb-1 uppercase tracking-wider">備註</p>
-                                <div className="whitespace-pre-wrap font-medium">{ticket.note}</div>
-                            </div>
-                        )}
+                        {/* Modified: Removed the notes and tags display in view mode */}
 
                         <div className="flex flex-col gap-3 mt-4">
                             {isEditing ? (
@@ -612,7 +598,6 @@
                             ) : (
                                 <>
                                     {!ticket.isDeleted && (
-                                        // 2. Modified: Redeem button bigger (py-5, text-xl) and green
                                         <button 
                                             onClick={() => { onToggleComplete(ticket); onClose(); }} 
                                             className={`w-full py-5 text-xl font-black rounded-2xl shadow-lg flex items-center justify-center gap-2 text-white transition-transform active:scale-95 ${ticket.completed ? 'bg-emerald-500 shadow-emerald-200 hover:bg-emerald-600' : 'bg-emerald-500 shadow-emerald-200 hover:bg-emerald-600'}`}
@@ -634,7 +619,6 @@
                                             <Trash2 size={18}/> {ticket.isDeleted ? '永久刪除' : '刪除'}
                                         </button>
                                         
-                                        {/* 4. Added: Close Button next to other buttons */}
                                         <button onClick={onClose} className="flex-1 py-3 bg-slate-100 text-slate-600 font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-slate-200 border border-slate-200">
                                             <X size={18}/> 關閉
                                         </button>
@@ -1073,3 +1057,4 @@
     </script>
 </body>
 </html>
+
