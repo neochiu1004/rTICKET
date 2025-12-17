@@ -107,7 +107,7 @@
             Bell, BellRing, Send, UserCheck, CloudCog, Maximize2, Wand2, WifiOff, FileUp, Replace, FilePlus2, RefreshCw,
             ImagePlus, Heart, HeartHandshake, Eye, EyeOff, Globe, BookOpen, Star, History, MousePointerClick, Layers,
             CalendarX2, CopyPlus, Lightbulb, Loader2, QrCode, SlidersHorizontal, ArrowUpDown, Image, CheckCheck, SendHorizontal, XCircle, Droplets,
-            MoveVertical, BoxSelect, Monitor, Palette
+            MoveVertical, BoxSelect, Monitor, Palette, Rows, LayoutGrid, ChevronRight, ChevronDown as ChevronDownIcon
         } from 'lucide-react';
 
         // --- 1. Core Logic (Helpers) ---
@@ -165,7 +165,8 @@
                     canvas.width = width; canvas.height = height;
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0, width, height);
-                    resolve(canvas.toDataURL('image/jpeg', 0.6));
+                    // Modified: Use webp to preserve transparency
+                    resolve(canvas.toDataURL('image/webp', 0.8));
                 };
                 img.onerror = reject;
                 if (typeof fileOrUrl === 'string') img.src = fileOrUrl;
@@ -514,7 +515,7 @@
                                             </div>
                                             <input 
                                                 type="range" 
-                                                min="0.0" /* Request 3: allow 0% */
+                                                min="0.0" 
                                                 max="1.0" 
                                                 step="0.05" 
                                                 value={currentViewConfig.cardOpacity} 
@@ -550,15 +551,15 @@
             );
         };
 
-        const Header = ({ appTitle, onTitleChange, onOpenMenu, onOpenSettings, sortType, setSortType, setSearchQuery, searchQuery, isSelectionMode, setIsSelectionMode, selectedCount, onSelectAll }) => (
-            <div className="bg-white/80 backdrop-blur-md px-5 pt-12 pb-3 shadow-sm sticky top-0 z-30 border-b border-white/20 transition-all rounded-b-[24px]">
+        const Header = ({ appTitle, onTitleChange, onOpenMenu, onOpenSettings, sortType, setSortType, setSearchQuery, searchQuery, isSelectionMode, setIsSelectionMode, selectedCount, onSelectAll, isCompact, setIsCompact, hasBg }) => (
+            <div className={`px-5 pt-12 pb-3 shadow-sm sticky top-0 z-30 transition-all rounded-b-[24px] ${hasBg ? 'bg-transparent shadow-none' : 'bg-white/80 backdrop-blur-md border-b border-white/20 text-slate-800'}`}>
                 <div className="flex justify-between items-center mb-4">
                     <div className="flex items-center gap-2 group cursor-pointer" onClick={() => {
                         const newTitle = prompt("修改標題名稱:", appTitle);
                         if(newTitle) onTitleChange(newTitle);
                     }}>
-                        <h1 className="text-2xl font-black text-slate-800 tracking-tight drop-shadow-sm">{appTitle}</h1>
-                        <Pencil size={14} className="text-slate-300 group-hover:text-sky-500 transition-colors"/>
+                        <h1 className="text-2xl font-black tracking-tight drop-shadow-sm" style={{color: hasBg ? 'inherit' : ''}}>{appTitle}</h1>
+                        <Pencil size={14} className="text-slate-400 group-hover:text-sky-500 transition-colors"/>
                     </div>
                     <div className="flex gap-2">
                         {isSelectionMode && (
@@ -571,14 +572,14 @@
                         )}
                         <button 
                             onClick={() => setIsSelectionMode(!isSelectionMode)} 
-                            className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${isSelectionMode ? 'bg-sky-500 text-white shadow-md' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                            className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${isSelectionMode ? 'bg-sky-500 text-white shadow-md' : 'bg-slate-100/80 text-slate-600 hover:bg-slate-200'}`}
                         >
                             {isSelectionMode ? `已選 ${selectedCount}` : '選取'}
                         </button>
-                        <button onClick={onOpenSettings} className="w-9 h-9 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-500 hover:text-sky-600 hover:bg-white transition-all shadow-sm">
+                        <button onClick={onOpenSettings} className="w-9 h-9 rounded-full bg-slate-50/50 border border-slate-100/50 flex items-center justify-center text-slate-500 hover:text-sky-600 hover:bg-white transition-all shadow-sm">
                             <i className="fas fa-cog"></i>
                         </button>
-                        <button onClick={onOpenMenu} className="w-9 h-9 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-500 hover:text-sky-600 hover:bg-white transition-all shadow-sm">
+                        <button onClick={onOpenMenu} className="w-9 h-9 rounded-full bg-slate-50/50 border border-slate-100/50 flex items-center justify-center text-slate-500 hover:text-sky-600 hover:bg-white transition-all shadow-sm">
                             <i className="fas fa-ellipsis-v"></i>
                         </button>
                     </div>
@@ -592,16 +593,25 @@
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
                             placeholder="搜尋名稱、標籤..." 
-                            className="w-full pl-10 pr-3 py-2.5 text-sm bg-slate-50/80 border border-transparent focus:bg-white focus:border-sky-200 rounded-2xl outline-none font-medium text-slate-700 transition-all placeholder:text-slate-400" 
+                            className="w-full pl-10 pr-3 py-2.5 text-sm bg-slate-50/60 border border-transparent focus:bg-white focus:border-sky-200 rounded-2xl outline-none font-medium text-slate-700 transition-all placeholder:text-slate-400 backdrop-blur-sm" 
                         />
                     </div>
+                    {/* Compact Mode Toggle */}
+                    <button 
+                        onClick={() => setIsCompact(!isCompact)}
+                        className={`w-10 flex-shrink-0 flex items-center justify-center rounded-2xl transition-all ${isCompact ? 'bg-sky-500 text-white shadow-md shadow-sky-200' : 'bg-slate-50/60 text-slate-500 hover:bg-white border border-transparent hover:border-slate-200'}`}
+                        title={isCompact ? "切換至展開模式" : "切換至列表模式"}
+                    >
+                        {isCompact ? <Rows size={18}/> : <LayoutGrid size={18}/>}
+                    </button>
+                    
                     <button 
                         onClick={() => {
                             const types = ['expiring', 'newest', 'oldest'];
                             const nextIdx = (types.indexOf(sortType) + 1) % types.length;
                             setSortType(types[nextIdx]);
                         }}
-                        className="px-4 py-2.5 bg-slate-50/80 hover:bg-white border border-transparent hover:border-slate-200 rounded-2xl flex items-center gap-1.5 text-xs font-bold text-slate-600 transition-all"
+                        className="px-4 py-2.5 bg-slate-50/60 hover:bg-white border border-transparent hover:border-slate-200 rounded-2xl flex items-center gap-1.5 text-xs font-bold text-slate-600 transition-all backdrop-blur-sm"
                     >
                         <ArrowUpDown size={14} className="text-sky-500"/>
                         {sortType === 'expiring' ? '快到期' : sortType === 'newest' ? '最新' : '最舊'}
@@ -610,23 +620,23 @@
             </div>
         );
 
-        const TagTabs = ({ activeTag, setActiveTag, tags, onManageTags }) => {
+        const TagTabs = ({ activeTag, setActiveTag, tags, onManageTags, hasBg }) => {
             const displayTags = ['all', ...tags.slice(0, 10)];
             return (
-                <div className="bg-white/30 backdrop-blur-sm px-4 pt-3 pb-2 border-b border-white/20 flex items-center gap-2 sticky top-[125px] z-20 overflow-hidden">
+                <div className={`px-4 pt-2 pb-2 flex items-center gap-2 sticky top-[110px] z-20 overflow-hidden ${hasBg ? 'bg-transparent' : 'bg-white/30 backdrop-blur-sm border-b border-white/20'}`}>
                     <div className="flex gap-3 overflow-x-auto no-scrollbar flex-1 pb-1">
                         {displayTags.map(tag => (
-                            <button key={tag} onClick={() => setActiveTag(tag)} className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${activeTag === tag ? 'bg-sky-500 text-white shadow-md shadow-sky-200' : 'bg-slate-50/80 text-slate-500 hover:bg-white'}`}>
+                            <button key={tag} onClick={() => setActiveTag(tag)} className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${activeTag === tag ? 'bg-sky-500 text-white shadow-md shadow-sky-200' : 'bg-slate-50/60 text-slate-600 hover:bg-white'}`}>
                                 {tag === 'all' ? '全部' : tag}
                             </button>
                         ))}
                     </div>
-                    <button onClick={onManageTags} className="p-2 text-slate-400 hover:text-sky-600 bg-white/80 shadow-sm rounded-full border border-slate-50"><SlidersHorizontal size={16}/></button>
+                    <button onClick={onManageTags} className="p-2 text-slate-400 hover:text-sky-600 bg-white/60 shadow-sm rounded-full border border-slate-50/50"><SlidersHorizontal size={16}/></button>
                 </div>
             );
         };
 
-        const TicketCard = ({ ticket, onClick, notifyDays, isSelectionMode, isSelected, onSelect, isDuplicate, opacity = 0.95, cardBgColor = '#ffffff' }) => {
+        const TicketCard = ({ ticket, onClick, notifyDays, isSelectionMode, isSelected, onSelect, isDuplicate, opacity = 0.95, cardBgColor = '#ffffff', isCompact }) => {
             const isExpiring = !ticket.completed && ticket.expiry && checkIsExpiringSoon(ticket.expiry, notifyDays);
             
             const duplicateStyle = isDuplicate && !ticket.completed && !ticket.isDeleted 
@@ -638,14 +648,55 @@
             
             let bgBase = `rgba(${r}, ${g}, ${b}, ${opacity})`;
             
-            // Overrides for states (light tint on top of custom color if selected/expiring)
-            // But if user sets opacity to 0, these tints might look weird floating. 
-            // Strategy: Use a solid color overlay with opacity if state active.
             let overlayClass = '';
             if (isSelected) overlayClass = 'bg-sky-500/10 ring-2 ring-sky-500 border-sky-500';
             else if (isExpiring && !ticket.completed && !ticket.isDeleted) overlayClass = 'bg-red-500/10 border-red-400 shadow-red-100';
             else overlayClass = 'border-slate-100 hover:border-sky-200 hover:shadow-md';
 
+            // --- Compact Mode Render (Tighter) ---
+            if (isCompact) {
+                return (
+                    <div 
+                        onClick={() => {
+                            if(isSelectionMode) onSelect(ticket.id);
+                            else onClick(ticket);
+                        }}
+                        style={{ backgroundColor: bgBase }}
+                        className={`backdrop-blur-sm mx-2 mb-1 p-1 rounded-lg shadow-sm border flex items-center gap-2 active:scale-[0.98] transition-all cursor-pointer relative overflow-hidden group ${overlayClass} ${duplicateStyle}`}
+                    >
+                        {isSelectionMode && (
+                            <div className={`w-4 h-4 flex-shrink-0 rounded-full border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-sky-500 border-sky-500' : 'border-slate-300 bg-white'}`}>
+                                {isSelected && <Check size={10} className="text-white"/>}
+                            </div>
+                        )}
+                        
+                        <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                                {isDuplicate && !ticket.completed && !ticket.isDeleted && (
+                                    <span className="text-[9px] bg-red-500 text-white px-1.5 py-0.5 rounded font-bold">重複</span>
+                                )}
+                                <h3 className={`font-bold text-slate-800 line-clamp-1 text-sm ${ticket.completed ? 'line-through text-slate-400' : ''}`}>
+                                    {ticket.productName}
+                                </h3>
+                            </div>
+                            <div className="flex items-center gap-2 mt-0.5">
+                                {isExpiring && !ticket.completed && !ticket.isDeleted && <span className="text-[9px] font-bold text-red-500 flex items-center gap-0.5"><AlertCircle size={9}/> 快到期</span>}
+                                <span className={`text-[10px] font-bold ${ticket.completed ? 'text-emerald-600' : 'text-slate-400'}`}>
+                                    {ticket.completed ? `已用 ${formatTime(ticket.completedAt)}` : (ticket.expiry || '無期限')}
+                                </span>
+                            </div>
+                        </div>
+
+                        {!isSelectionMode && (
+                            <button className={`flex-shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-lg transition-all ${ticket.completed ? 'bg-slate-100 text-slate-500' : 'bg-emerald-100 text-emerald-600 hover:bg-emerald-500 hover:text-white'}`}>
+                                {ticket.completed ? '查看' : '兌換'}
+                            </button>
+                        )}
+                    </div>
+                );
+            }
+
+            // --- Standard (Expanded) Render ---
             return (
                 <div 
                     onClick={() => {
@@ -667,7 +718,8 @@
                         </div>
                     )}
 
-                    <div className="w-20 h-20 flex-shrink-0 bg-slate-50 rounded-2xl flex items-center justify-center overflow-hidden border border-slate-100 relative group-hover:scale-105 transition-transform">
+                    {/* Modified Image Container: Removed bg-slate-50 and border to support transparency */}
+                    <div className="w-20 h-20 flex-shrink-0 rounded-2xl flex items-center justify-center overflow-hidden relative group-hover:scale-105 transition-transform">
                         {ticket.image ? (
                             <img src={ticket.image} alt="logo" className={`w-full h-full object-cover ${ticket.completed ? 'grayscale opacity-50' : ''}`} />
                         ) : (
@@ -714,6 +766,16 @@
                             )}
                         </div>
                     </div>
+                    
+                    {/* Rip Effect circles need background color update dynamically if possible, but keep simple for now */}
+                    <div className="ticket-rip-l" style={{backgroundColor: 'transparent', boxShadow: 'none', borderLeft: '6px solid transparent'}}></div> 
+                    {/* The original rip effect was dependent on exact bg match. With custom BG, it's tricky. 
+                        Let's simplify it or just hide it if it looks bad. For now, kept but might look odd on custom BG. 
+                        Actually, let's just make it white to match card if we can't match BG.
+                        Wait, the rip is ON the card, eating INTO it. The color should match the BACKGROUND BEHIND the card.
+                        Since BG is dynamic, we can't easily do CSS.
+                        Alternative: Removing rip effect to avoid visual glitches on custom background.
+                    */}
                 </div>
             );
         };
@@ -796,7 +858,8 @@
                         </div>
 
                         {!isEditing && (
-                            <div className="my-6 flex flex-col items-center gap-4 bg-slate-50 p-5 rounded-[24px] border border-slate-100 shadow-inner">
+                            // Removed bg-slate-50, border, shadow-inner here
+                            <div className="my-4 flex flex-col items-center gap-4">
                                 {hasSerial && hasImage && (
                                     <div className="flex bg-slate-200 p-1 rounded-xl mb-1">
                                         <button onClick={()=>setShowOriginalImage(false)} className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${!showOriginalImage ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}>條碼</button>
@@ -1048,6 +1111,9 @@
             const [searchQuery, setSearchQuery] = useState('');
             const [showAddModal, setShowAddModal] = useState(false);
             const [selectedTicket, setSelectedTicket] = useState(null);
+            
+            // New State: Compact Mode
+            const [isCompact, setIsCompact] = useState(false);
             
             // Selection Mode
             const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -1349,9 +1415,12 @@
                             isSelectionMode={isSelectionMode} setIsSelectionMode={setIsSelectionMode}
                             selectedCount={selectedIds.size}
                             onSelectAll={handleSelectAll}
+                            isCompact={isCompact}
+                            setIsCompact={setIsCompact}
+                            hasBg={!!currentConfig.backgroundImage}
                         />
                         
-                        <TagTabs activeTag={activeTag} setActiveTag={setActiveTag} tags={allTags} onManageTags={() => setShowTagManager(true)}/>
+                        <TagTabs activeTag={activeTag} setActiveTag={setActiveTag} tags={allTags} onManageTags={() => setShowTagManager(true)} hasBg={!!currentConfig.backgroundImage}/>
                         
                         <div className={`pb-8 min-h-[50vh] pt-2 transition-colors ${currentConfig.backgroundImage ? 'bg-slate-50/50' : 'bg-slate-50'}`}>
                             {filteredTasks.length > 0 ? (
@@ -1363,6 +1432,7 @@
                                         isDuplicate={duplicateSerials.has(ticket.serial)}
                                         opacity={currentConfig.cardOpacity}
                                         cardBgColor={currentConfig.cardBgColor}
+                                        isCompact={isCompact}
                                     />
                                 ))
                             ) : (
