@@ -1087,105 +1087,113 @@
                 setIsSelectionMode(false);
             };
 
-            const bgStyle = settings.backgroundImage ? {
-                backgroundImage: `url(${settings.backgroundImage})`,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
-                backgroundAttachment: 'fixed'
-            } : {};
-
             return (
-                <div 
-                    className="max-w-md mx-auto min-h-screen relative pb-28 shadow-2xl sm:border-x border-slate-200 transition-all duration-500"
-                    style={{
-                        backgroundColor: settings.backgroundImage ? 'transparent' : '#fff',
-                        ...bgStyle
-                    }}
-                >
-                    <Header 
-                        appTitle={settings.appTitle}
-                        onTitleChange={(t) => setSettings(s => ({...s, appTitle: t}))}
-                        onOpenSettings={() => setShowSettings(true)}
-                        onOpenMenu={() => {
-                            const action = prompt("1.完整備份(含設定) 2.匯入還原 3.清空資料");
-                            if(action==='1') handleBackup(); if(action==='2') handleImport(); if(action==='3' && confirm("確定清空？")) setTasks([]);
-                        }}
-                        sortType={sortType} setSortType={setSortType}
-                        searchQuery={searchQuery} setSearchQuery={setSearchQuery}
-                        isSelectionMode={isSelectionMode} setIsSelectionMode={setIsSelectionMode}
-                        selectedCount={selectedIds.size}
-                        onSelectAll={handleSelectAll}
-                    />
-                    
-                    <TagTabs activeTag={activeTag} setActiveTag={setActiveTag} tags={allTags} onManageTags={() => setShowTagManager(true)}/>
-                    
-                    <div className={`pb-8 min-h-[50vh] pt-2 transition-colors ${settings.backgroundImage ? 'bg-slate-50/50' : 'bg-slate-50'}`}>
-                        {filteredTasks.length > 0 ? (
-                            filteredTasks.map(ticket => (
-                                <TicketCard 
-                                    key={ticket.id} ticket={ticket} 
-                                    onClick={setSelectedTicket} notifyDays={settings.notifyDays}
-                                    isSelectionMode={isSelectionMode} isSelected={selectedIds.has(ticket.id)} onSelect={handleSelect}
-                                    isDuplicate={duplicateSerials.has(ticket.serial)}
-                                    opacity={settings.cardOpacity}
-                                />
-                            ))
-                        ) : (
-                            <div className="text-center py-24 text-slate-300">
-                                <i className="fas fa-ticket-alt text-5xl mb-4 opacity-30"></i>
-                                <p className="font-bold">暫無票券</p>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* FAB / Selection Actions */}
-                    {isSelectionMode ? (
-                        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 flex gap-3 z-40 animate-slide-up">
-                            {selectedIds.size > 0 && (
-                                <>
-                                    <button onClick={() => setShowBatchModal(true)} className="bg-sky-500 hover:bg-sky-600 text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-sky-200 flex items-center gap-2 transition-transform active:scale-95">
-                                        <Tag size={18}/> 批量標籤
-                                    </button>
-                                    <button onClick={() => {
-                                        if(confirm(`確定刪除 ${selectedIds.size} 項目？`)) {
-                                            if(view === 'deleted') setTasks(prev => prev.filter(t => !selectedIds.has(t.id)));
-                                            else setTasks(prev => prev.map(t => selectedIds.has(t.id) ? { ...t, isDeleted: true } : t));
-                                            setSelectedIds(new Set()); setIsSelectionMode(false);
-                                        }
-                                    }} className="bg-white text-red-500 border border-red-100 px-4 py-3 rounded-2xl font-bold shadow-lg flex items-center gap-2 hover:bg-red-50">
-                                        <Trash2 size={18}/>
-                                    </button>
-                                </>
-                            )}
-                            <button onClick={() => {setIsSelectionMode(false); setSelectedIds(new Set());}} className="bg-slate-800 text-white px-4 py-3 rounded-2xl font-bold shadow-lg">取消</button>
-                        </div>
-                    ) : (
-                        <button onClick={() => setShowAddModal(true)} className="fixed bottom-24 right-5 w-16 h-16 bg-sky-500 text-white rounded-[24px] shadow-2xl shadow-sky-300 flex items-center justify-center text-3xl active:scale-90 transition-transform z-40 hover:bg-sky-600 hover:rotate-90 duration-300">
-                            <Plus size={32}/>
-                        </button>
+                <>
+                    {/* 1. Fixed Background Layer */}
+                    {settings.backgroundImage && (
+                        <div 
+                            className="fixed inset-0 z-0 mx-auto max-w-md transition-all duration-500"
+                            style={{
+                                backgroundImage: `url(${settings.backgroundImage})`,
+                                backgroundSize: 'cover',
+                                backgroundPosition: 'center',
+                                backgroundRepeat: 'no-repeat',
+                            }}
+                        />
                     )}
 
-                    <div className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-slate-100 pb-safe pt-2 px-6 flex justify-around items-end z-40 h-[80px] sm:max-w-md sm:mx-auto">
-                        <button onClick={() => setView('active')} className={`flex flex-col items-center gap-1.5 w-16 mb-3 transition-all ${view === 'active' ? 'text-sky-500 scale-110' : 'text-slate-300 hover:text-slate-400'}`}><ListTodo size={26} strokeWidth={view==='active'?3:2}/><span className="text-[10px] font-bold">待使用</span></button>
-                        <button onClick={() => setView('completed')} className={`flex flex-col items-center gap-1.5 w-16 mb-3 transition-all ${view === 'completed' ? 'text-emerald-500 scale-110' : 'text-slate-300 hover:text-slate-400'}`}><CheckCircle2 size={26} strokeWidth={view==='completed'?3:2}/><span className="text-[10px] font-bold">已使用</span></button>
-                        <button onClick={() => setView('deleted')} className={`flex flex-col items-center gap-1.5 w-16 mb-3 transition-all ${view === 'deleted' ? 'text-red-500 scale-110' : 'text-slate-300 hover:text-slate-400'}`}><Trash size={26} strokeWidth={view==='deleted'?3:2}/><span className="text-[10px] font-bold">回收桶</span></button>
-                    </div>
+                    {/* 2. Main Content Container */}
+                    <div 
+                        className="max-w-md mx-auto min-h-screen relative pb-28 shadow-2xl sm:border-x border-slate-200 transition-all duration-500 z-10"
+                        style={{
+                            backgroundColor: settings.backgroundImage ? 'transparent' : '#fff',
+                        }}
+                    >
+                        <Header 
+                            appTitle={settings.appTitle}
+                            onTitleChange={(t) => setSettings(s => ({...s, appTitle: t}))}
+                            onOpenSettings={() => setShowSettings(true)}
+                            onOpenMenu={() => {
+                                const action = prompt("1.完整備份(含設定) 2.匯入還原 3.清空資料");
+                                if(action==='1') handleBackup(); if(action==='2') handleImport(); if(action==='3' && confirm("確定清空？")) setTasks([]);
+                            }}
+                            sortType={sortType} setSortType={setSortType}
+                            searchQuery={searchQuery} setSearchQuery={setSearchQuery}
+                            isSelectionMode={isSelectionMode} setIsSelectionMode={setIsSelectionMode}
+                            selectedCount={selectedIds.size}
+                            onSelectAll={handleSelectAll}
+                        />
+                        
+                        <TagTabs activeTag={activeTag} setActiveTag={setActiveTag} tags={allTags} onManageTags={() => setShowTagManager(true)}/>
+                        
+                        <div className={`pb-8 min-h-[50vh] pt-2 transition-colors ${settings.backgroundImage ? 'bg-slate-50/50' : 'bg-slate-50'}`}>
+                            {filteredTasks.length > 0 ? (
+                                filteredTasks.map(ticket => (
+                                    <TicketCard 
+                                        key={ticket.id} ticket={ticket} 
+                                        onClick={setSelectedTicket} notifyDays={settings.notifyDays}
+                                        isSelectionMode={isSelectionMode} isSelected={selectedIds.has(ticket.id)} onSelect={handleSelect}
+                                        isDuplicate={duplicateSerials.has(ticket.serial)}
+                                        opacity={settings.cardOpacity}
+                                    />
+                                ))
+                            ) : (
+                                <div className="text-center py-24 text-slate-300">
+                                    <i className="fas fa-ticket-alt text-5xl mb-4 opacity-30"></i>
+                                    <p className="font-bold">暫無票券</p>
+                                </div>
+                            )}
+                        </div>
 
-                    <AddTicketModal isOpen={showAddModal} onClose={() => setShowAddModal(false)} onAddBatch={handleAddBatch} allTags={allTags} />
-                    <RedeemModal ticket={selectedTicket} onClose={() => setSelectedTicket(null)} onToggleComplete={handleToggleComplete} onDelete={handleDelete} onRestore={handleRestore} onUpdate={handleUpdate} allTags={allTags} />
-                    <SettingsModal 
-                        isOpen={showSettings} onClose={() => setShowSettings(false)} 
-                        {...settings} 
-                        setTgToken={t => setSettings(s=>({...s, tgToken:t}))} 
-                        setTgChatId={t => setSettings(s=>({...s, tgChatId:t}))} 
-                        setNotifyDays={t => setSettings(s=>({...s, notifyDays:t}))} 
-                        setBackgroundImage={t => setSettings(s=>({...s, backgroundImage:t}))}
-                        setCardOpacity={t => setSettings(s=>({...s, cardOpacity:t}))}
-                        onSave={setSettings}
-                    />
-                    <TagManagerModal isOpen={showTagManager} onClose={() => setShowTagManager(false)} tags={allTags} onDeleteTag={handleDeleteTag} />
-                    <BatchEditModal isOpen={showBatchModal} onClose={() => setShowBatchModal(false)} selectedCount={selectedIds.size} onAddTag={handleBatchAddTag} allTags={allTags} />
-                </div>
+                        {/* FAB / Selection Actions */}
+                        {isSelectionMode ? (
+                            <div className="fixed bottom-24 left-1/2 -translate-x-1/2 flex gap-3 z-40 animate-slide-up">
+                                {selectedIds.size > 0 && (
+                                    <>
+                                        <button onClick={() => setShowBatchModal(true)} className="bg-sky-500 hover:bg-sky-600 text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-sky-200 flex items-center gap-2 transition-transform active:scale-95">
+                                            <Tag size={18}/> 批量標籤
+                                        </button>
+                                        <button onClick={() => {
+                                            if(confirm(`確定刪除 ${selectedIds.size} 項目？`)) {
+                                                if(view === 'deleted') setTasks(prev => prev.filter(t => !selectedIds.has(t.id)));
+                                                else setTasks(prev => prev.map(t => selectedIds.has(t.id) ? { ...t, isDeleted: true } : t));
+                                                setSelectedIds(new Set()); setIsSelectionMode(false);
+                                            }
+                                        }} className="bg-white text-red-500 border border-red-100 px-4 py-3 rounded-2xl font-bold shadow-lg flex items-center gap-2 hover:bg-red-50">
+                                            <Trash2 size={18}/>
+                                        </button>
+                                    </>
+                                )}
+                                <button onClick={() => {setIsSelectionMode(false); setSelectedIds(new Set());}} className="bg-slate-800 text-white px-4 py-3 rounded-2xl font-bold shadow-lg">取消</button>
+                            </div>
+                        ) : (
+                            <button onClick={() => setShowAddModal(true)} className="fixed bottom-24 right-5 w-16 h-16 bg-sky-500 text-white rounded-[24px] shadow-2xl shadow-sky-300 flex items-center justify-center text-3xl active:scale-90 transition-transform z-40 hover:bg-sky-600 hover:rotate-90 duration-300">
+                                <Plus size={32}/>
+                            </button>
+                        )}
+
+                        <div className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-slate-100 pb-safe pt-2 px-6 flex justify-around items-end z-40 h-[80px] sm:max-w-md sm:mx-auto">
+                            <button onClick={() => setView('active')} className={`flex flex-col items-center gap-1.5 w-16 mb-3 transition-all ${view === 'active' ? 'text-sky-500 scale-110' : 'text-slate-300 hover:text-slate-400'}`}><ListTodo size={26} strokeWidth={view==='active'?3:2}/><span className="text-[10px] font-bold">待使用</span></button>
+                            <button onClick={() => setView('completed')} className={`flex flex-col items-center gap-1.5 w-16 mb-3 transition-all ${view === 'completed' ? 'text-emerald-500 scale-110' : 'text-slate-300 hover:text-slate-400'}`}><CheckCircle2 size={26} strokeWidth={view==='completed'?3:2}/><span className="text-[10px] font-bold">已使用</span></button>
+                            <button onClick={() => setView('deleted')} className={`flex flex-col items-center gap-1.5 w-16 mb-3 transition-all ${view === 'deleted' ? 'text-red-500 scale-110' : 'text-slate-300 hover:text-slate-400'}`}><Trash size={26} strokeWidth={view==='deleted'?3:2}/><span className="text-[10px] font-bold">回收桶</span></button>
+                        </div>
+
+                        <AddTicketModal isOpen={showAddModal} onClose={() => setShowAddModal(false)} onAddBatch={handleAddBatch} allTags={allTags} />
+                        <RedeemModal ticket={selectedTicket} onClose={() => setSelectedTicket(null)} onToggleComplete={handleToggleComplete} onDelete={handleDelete} onRestore={handleRestore} onUpdate={handleUpdate} allTags={allTags} />
+                        <SettingsModal 
+                            isOpen={showSettings} onClose={() => setShowSettings(false)} 
+                            {...settings} 
+                            setTgToken={t => setSettings(s=>({...s, tgToken:t}))} 
+                            setTgChatId={t => setSettings(s=>({...s, tgChatId:t}))} 
+                            setNotifyDays={t => setSettings(s=>({...s, notifyDays:t}))} 
+                            setBackgroundImage={t => setSettings(s=>({...s, backgroundImage:t}))}
+                            setCardOpacity={t => setSettings(s=>({...s, cardOpacity:t}))}
+                            onSave={setSettings}
+                        />
+                        <TagManagerModal isOpen={showTagManager} onClose={() => setShowTagManager(false)} tags={allTags} onDeleteTag={handleDeleteTag} />
+                        <BatchEditModal isOpen={showBatchModal} onClose={() => setShowBatchModal(false)} selectedCount={selectedIds.size} onAddTag={handleBatchAddTag} allTags={allTags} />
+                    </div>
+                </>
             );
         };
 
