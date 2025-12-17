@@ -107,8 +107,7 @@
             Bell, BellRing, Send, UserCheck, CloudCog, Maximize2, Wand2, WifiOff, FileUp, Replace, FilePlus2, RefreshCw,
             ImagePlus, Heart, HeartHandshake, Eye, EyeOff, Globe, BookOpen, Star, History, MousePointerClick, Layers,
             CalendarX2, CopyPlus, Lightbulb, Loader2, QrCode, SlidersHorizontal, ArrowUpDown, Image, CheckCheck, SendHorizontal, XCircle, Droplets,
-            MoveVertical, BoxSelect, Monitor, Palette, Rows, LayoutGrid, ChevronRight, ChevronDown as ChevronDownIcon,
-            AlignVerticalSpaceAround
+            MoveVertical, BoxSelect, Monitor, Palette, Rows, LayoutGrid, ChevronRight, ChevronDown as ChevronDownIcon
         } from 'lucide-react';
 
         // --- 1. Core Logic (Helpers) ---
@@ -166,7 +165,6 @@
                     canvas.width = width; canvas.height = height;
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0, width, height);
-                    // Modified: Use webp to preserve transparency
                     resolve(canvas.toDataURL('image/webp', 0.8));
                 };
                 img.onerror = reject;
@@ -186,7 +184,6 @@
             return diffDays <= thresholdDays && diffDays >= -1; 
         };
 
-        // Date Only
         const formatTime = (timestamp) => {
             if(!timestamp) return '';
             const d = new Date(timestamp);
@@ -194,7 +191,6 @@
             return `${d.getFullYear()}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getDate().toString().padStart(2,'0')}`;
         };
 
-        // Date and Time (HH:mm)
         const formatDateTime = (timestamp) => {
             if(!timestamp) return '';
             const d = new Date(timestamp);
@@ -204,9 +200,7 @@
             return `${datePart} ${timePart}`;
         };
 
-        // HEX to RGB for Opacity handling
         const hexToRgb = (hex) => {
-            // Expand shorthand form (e.g. "03F") to full form (e.g. "0033FF")
             var shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i;
             hex = hex.replace(shorthandRegex, function(m, r, g, b) {
                 return r + r + g + g + b + b;
@@ -299,7 +293,9 @@
             bgPosY: 50, 
             bgSize: 'cover',
             cardBgColor: '#ffffff',
-            compactSpacing: 2 // New default for compact spacing
+            // 新增：折疊模式設定
+            compactHeight: 70,
+            compactShowImage: false
         };
 
         const SettingsModal = ({ isOpen, onClose, settings, bgHistory, onSave, onRemoveHistory }) => {
@@ -389,58 +385,6 @@
                                 </div>
 
                                 <div className="space-y-4 animate-fade-in">
-                                    
-                                    {/* Opacity & Color & Spacing */}
-                                    <div className="bg-slate-50 p-3 rounded-xl space-y-3">
-                                        {/* Color Picker */}
-                                        <div className="flex justify-between items-center">
-                                            <label className="text-xs font-bold text-slate-500 flex items-center gap-1"><Palette size={12}/> 卡片底色</label>
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-[10px] font-mono text-slate-400">{currentViewConfig.cardBgColor}</span>
-                                                <input 
-                                                    type="color" 
-                                                    value={currentViewConfig.cardBgColor}
-                                                    onChange={e => handleViewConfigChange('cardBgColor', e.target.value)}
-                                                    className="w-6 h-6 rounded overflow-hidden border-none outline-none cursor-pointer"
-                                                />
-                                            </div>
-                                        </div>
-                                        
-                                        {/* Opacity Slider */}
-                                        <div>
-                                            <div className="flex justify-between items-center mb-1">
-                                                <label className="text-xs font-bold text-slate-500 flex items-center gap-1"><Droplets size={12}/> 卡片透明度</label>
-                                                <span className="text-xs font-bold text-sky-600">{Math.round(currentViewConfig.cardOpacity * 100)}%</span>
-                                            </div>
-                                            <input 
-                                                type="range" 
-                                                min="0.0" 
-                                                max="1.0" 
-                                                step="0.05" 
-                                                value={currentViewConfig.cardOpacity} 
-                                                onChange={(e) => handleViewConfigChange('cardOpacity', parseFloat(e.target.value))}
-                                                className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-sky-500"
-                                            />
-                                        </div>
-
-                                        {/* Compact Spacing Slider - NEW */}
-                                        <div>
-                                            <div className="flex justify-between items-center mb-1">
-                                                <label className="text-xs font-bold text-slate-500 flex items-center gap-1"><AlignVerticalSpaceAround size={12}/> 列表模式間距</label>
-                                                <span className="text-xs font-bold text-sky-600">{currentViewConfig.compactSpacing ?? 2}px</span>
-                                            </div>
-                                            <input 
-                                                type="range" 
-                                                min="0" 
-                                                max="10" 
-                                                step="1" 
-                                                value={currentViewConfig.compactSpacing ?? 2} 
-                                                onChange={(e) => handleViewConfigChange('compactSpacing', parseInt(e.target.value))}
-                                                className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-sky-500"
-                                            />
-                                        </div>
-                                    </div>
-
                                     {/* History / Recent Backgrounds */}
                                     <div>
                                         <div className="text-xs font-bold text-slate-500 mb-2 flex justify-between">
@@ -545,6 +489,70 @@
                                         </div>
                                     )}
 
+                                    {/* Opacity & Color */}
+                                    <div className="bg-slate-50 p-3 rounded-xl space-y-3">
+                                        {/* Color Picker */}
+                                        <div className="flex justify-between items-center">
+                                            <label className="text-xs font-bold text-slate-500 flex items-center gap-1"><Palette size={12}/> 卡片底色</label>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-[10px] font-mono text-slate-400">{currentViewConfig.cardBgColor}</span>
+                                                <input 
+                                                    type="color" 
+                                                    value={currentViewConfig.cardBgColor}
+                                                    onChange={e => handleViewConfigChange('cardBgColor', e.target.value)}
+                                                    className="w-6 h-6 rounded overflow-hidden border-none outline-none cursor-pointer"
+                                                />
+                                            </div>
+                                        </div>
+                                        
+                                        {/* Opacity Slider (Inverted Logic as requested: 100% Transparency = 0 Opacity) */}
+                                        <div>
+                                            <div className="flex justify-between items-center mb-2">
+                                                <label className="text-xs font-bold text-slate-500 flex items-center gap-1"><Droplets size={12}/> 卡片透明度</label>
+                                                <span className="text-xs font-bold text-sky-600">{Math.round((1 - currentViewConfig.cardOpacity) * 100)}%</span>
+                                            </div>
+                                            <input 
+                                                type="range" 
+                                                min="0" 
+                                                max="100" 
+                                                step="5" 
+                                                /* Value represents transparency % */
+                                                value={Math.round((1 - currentViewConfig.cardOpacity) * 100)} 
+                                                /* Convert transparency back to opacity */
+                                                onChange={(e) => handleViewConfigChange('cardOpacity', 1 - (parseInt(e.target.value) / 100))}
+                                                className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-sky-500"
+                                            />
+                                            <div className="flex justify-between mt-1 px-1">
+                                                <span className="text-[10px] text-slate-400">不透明</span>
+                                                <span className="text-[10px] text-slate-400">完全透明</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Compact Mode Settings */}
+                                    <div className="bg-slate-50 p-3 rounded-xl space-y-3">
+                                        <div className="flex justify-between items-center">
+                                            <label className="text-xs font-bold text-slate-500 flex items-center gap-1"><Rows size={12}/> 列表模式高度</label>
+                                            <span className="text-xs font-bold text-sky-600">{currentViewConfig.compactHeight || 70}px</span>
+                                        </div>
+                                        <input 
+                                            type="range" min="40" max="150" step="5"
+                                            value={currentViewConfig.compactHeight || 70}
+                                            onChange={(e) => handleViewConfigChange('compactHeight', parseInt(e.target.value))}
+                                            className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-sky-500"
+                                        />
+
+                                        <div className="flex justify-between items-center mt-2">
+                                            <label className="text-xs font-bold text-slate-500 flex items-center gap-1"><Image size={12}/> 列表顯示圖片</label>
+                                            <button 
+                                                onClick={() => handleViewConfigChange('compactShowImage', !currentViewConfig.compactShowImage)}
+                                                className={`w-10 h-5 rounded-full relative transition-colors ${currentViewConfig.compactShowImage ? 'bg-sky-500' : 'bg-slate-300'}`}
+                                            >
+                                                <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${currentViewConfig.compactShowImage ? 'left-6' : 'left-1'}`}></div>
+                                            </button>
+                                        </div>
+                                    </div>
+
                                 </div>
                             </div>
 
@@ -573,7 +581,7 @@
         };
 
         const Header = ({ appTitle, onTitleChange, onOpenMenu, onOpenSettings, sortType, setSortType, setSearchQuery, searchQuery, isSelectionMode, setIsSelectionMode, selectedCount, onSelectAll, isCompact, setIsCompact, hasBg }) => (
-            <div className={`px-5 pt-12 pb-3 shadow-sm sticky top-0 z-30 transition-all rounded-b-[24px] ${hasBg ? 'bg-transparent shadow-none backdrop-blur-none' : 'bg-white/80 backdrop-blur-md border-b border-white/20 text-slate-800'}`}>
+            <div className={`px-5 pt-12 pb-3 shadow-sm sticky top-0 z-30 transition-all rounded-b-[24px] ${hasBg ? 'bg-transparent shadow-none' : 'bg-white/80 backdrop-blur-md border-b border-white/20 text-slate-800'}`}>
                 <div className="flex justify-between items-center mb-4">
                     <div className="flex items-center gap-2 group cursor-pointer" onClick={() => {
                         const newTitle = prompt("修改標題名稱:", appTitle);
@@ -641,11 +649,10 @@
             </div>
         );
 
-        // Modified: increased sticky top value from 110px to 150px to prevent overlap with header
         const TagTabs = ({ activeTag, setActiveTag, tags, onManageTags, hasBg }) => {
             const displayTags = ['all', ...tags.slice(0, 10)];
             return (
-                <div className={`px-4 pt-2 pb-2 flex items-center gap-2 sticky top-[150px] z-20 overflow-hidden ${hasBg ? 'bg-transparent backdrop-blur-none' : 'bg-white/30 backdrop-blur-sm border-b border-white/20'}`}>
+                <div className={`px-4 pt-2 pb-2 flex items-center gap-2 sticky top-[110px] z-20 overflow-hidden ${hasBg ? 'bg-transparent' : 'bg-white/30 backdrop-blur-sm border-b border-white/20'}`}>
                     <div className="flex gap-3 overflow-x-auto no-scrollbar flex-1 pb-1">
                         {displayTags.map(tag => (
                             <button key={tag} onClick={() => setActiveTag(tag)} className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${activeTag === tag ? 'bg-sky-500 text-white shadow-md shadow-sky-200' : 'bg-slate-50/60 text-slate-600 hover:bg-white'}`}>
@@ -658,7 +665,7 @@
             );
         };
 
-        const TicketCard = ({ ticket, onClick, notifyDays, isSelectionMode, isSelected, onSelect, isDuplicate, opacity = 0.95, cardBgColor = '#ffffff', isCompact, compactSpacing = 2 }) => {
+        const TicketCard = ({ ticket, onClick, notifyDays, isSelectionMode, isSelected, onSelect, isDuplicate, opacity = 0.95, cardBgColor = '#ffffff', isCompact, compactHeight = 70, compactShowImage = false }) => {
             const isExpiring = !ticket.completed && ticket.expiry && checkIsExpiringSoon(ticket.expiry, notifyDays);
             
             const duplicateStyle = isDuplicate && !ticket.completed && !ticket.isDeleted 
@@ -683,8 +690,8 @@
                             if(isSelectionMode) onSelect(ticket.id);
                             else onClick(ticket);
                         }}
-                        style={{ backgroundColor: bgBase, marginBottom: `${compactSpacing}px` }}
-                        className={`backdrop-blur-sm mx-1 p-[3px] rounded-md shadow-sm border flex items-center gap-1.5 active:scale-[0.98] transition-all cursor-pointer relative overflow-hidden group ${overlayClass} ${duplicateStyle}`}
+                        style={{ backgroundColor: bgBase, height: `${compactHeight}px` }}
+                        className={`backdrop-blur-sm mx-2 mb-1 px-2 rounded-lg shadow-sm border flex items-center gap-2 active:scale-[0.98] transition-all cursor-pointer relative overflow-hidden group ${overlayClass} ${duplicateStyle}`}
                     >
                         {isSelectionMode && (
                             <div className={`w-4 h-4 flex-shrink-0 rounded-full border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-sky-500 border-sky-500' : 'border-slate-300 bg-white'}`}>
@@ -692,7 +699,20 @@
                             </div>
                         )}
                         
-                        <div className="flex-1 min-w-0">
+                        {/* Compact Image (Optional) */}
+                        {compactShowImage && (
+                            <div className="h-full aspect-square py-1 mr-1 flex-shrink-0">
+                                {ticket.image ? (
+                                    <img src={ticket.image} alt="icon" className={`w-full h-full object-cover rounded-md ${ticket.completed ? 'grayscale opacity-50' : ''}`} />
+                                ) : (
+                                    <div className="w-full h-full bg-slate-100 rounded-md flex items-center justify-center border border-slate-200">
+                                        <i className="fas fa-ticket-alt text-slate-300 text-xs"></i>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        
+                        <div className="flex-1 min-w-0 flex flex-col justify-center">
                             <div className="flex items-center gap-2">
                                 {isDuplicate && !ticket.completed && !ticket.isDeleted && (
                                     <span className="text-[9px] bg-red-500 text-white px-1.5 py-0.5 rounded font-bold">重複</span>
@@ -710,7 +730,7 @@
                         </div>
 
                         {!isSelectionMode && (
-                            <button className={`flex-shrink-0 text-[9px] font-bold px-2 py-0 rounded-md transition-all h-6 flex items-center ${ticket.completed ? 'bg-slate-100 text-slate-500' : 'bg-emerald-100 text-emerald-600 hover:bg-emerald-500 hover:text-white'}`}>
+                            <button className={`flex-shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-lg transition-all ${ticket.completed ? 'bg-slate-100 text-slate-500' : 'bg-emerald-100 text-emerald-600 hover:bg-emerald-500 hover:text-white'}`}>
                                 {ticket.completed ? '查看' : '兌換'}
                             </button>
                         )}
@@ -1171,7 +1191,8 @@
                                 bgPosY: saved.bgPosY || 50,
                                 bgSize: saved.bgSize || 'cover',
                                 cardBgColor: '#ffffff',
-                                compactSpacing: 2
+                                compactHeight: 70,
+                                compactShowImage: false
                             },
                             completed: { ...defaultViewConfig }, // Use defaults for others initially
                             deleted: { ...defaultViewConfig }
@@ -1445,7 +1466,7 @@
                         
                         <TagTabs activeTag={activeTag} setActiveTag={setActiveTag} tags={allTags} onManageTags={() => setShowTagManager(true)} hasBg={!!currentConfig.backgroundImage}/>
                         
-                        <div className={`pb-8 min-h-[50vh] pt-2 transition-colors ${currentConfig.backgroundImage ? 'bg-transparent' : 'bg-slate-50'}`}>
+                        <div className={`pb-8 min-h-[50vh] pt-2 transition-colors ${currentConfig.backgroundImage ? 'bg-slate-50/50' : 'bg-slate-50'}`}>
                             {filteredTasks.length > 0 ? (
                                 filteredTasks.map(ticket => (
                                     <TicketCard 
@@ -1456,7 +1477,9 @@
                                         opacity={currentConfig.cardOpacity}
                                         cardBgColor={currentConfig.cardBgColor}
                                         isCompact={isCompact}
-                                        compactSpacing={currentConfig.compactSpacing ?? 2}
+                                        // Pass new compact props
+                                        compactHeight={currentConfig.compactHeight}
+                                        compactShowImage={currentConfig.compactShowImage}
                                     />
                                 ))
                             ) : (
@@ -1521,5 +1544,4 @@
     </script>
 </body>
 </html>
-
 
