@@ -107,7 +107,7 @@
             Bell, BellRing, Send, UserCheck, CloudCog, Maximize2, Wand2, WifiOff, FileUp, Replace, FilePlus2, RefreshCw,
             ImagePlus, Heart, HeartHandshake, Eye, EyeOff, Globe, BookOpen, Star, History, MousePointerClick, Layers,
             CalendarX2, CopyPlus, Lightbulb, Loader2, QrCode, SlidersHorizontal, ArrowUpDown, Image, CheckCheck, SendHorizontal, XCircle, Droplets,
-            MoveVertical, BoxSelect, Monitor
+            MoveVertical, BoxSelect, Monitor, Palette
         } from 'lucide-react';
 
         // --- 1. Core Logic (Helpers) ---
@@ -202,6 +202,21 @@
             return `${datePart} ${timePart}`;
         };
 
+        // HEX to RGB for Opacity handling
+        const hexToRgb = (hex) => {
+            // Expand shorthand form (e.g. "03F") to full form (e.g. "0033FF")
+            var shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i;
+            hex = hex.replace(shorthandRegex, function(m, r, g, b) {
+                return r + r + g + g + b + b;
+            });
+            var result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+            return result ? {
+                r: parseInt(result[1], 16),
+                g: parseInt(result[2], 16),
+                b: parseInt(result[3], 16)
+            } : { r: 255, g: 255, b: 255 };
+        };
+
         const sendTelegramMessage = async (token, chatId, text) => {
             if (!token || !chatId) return { success: false, error: 'Missing token or chat_id' };
             try {
@@ -276,23 +291,41 @@
             );
         };
 
+        const defaultViewConfig = {
+            backgroundImage: '', 
+            cardOpacity: 0.95, 
+            bgPosY: 50, 
+            bgSize: 'cover',
+            cardBgColor: '#ffffff'
+        };
+
         const SettingsModal = ({ isOpen, onClose, settings, bgHistory, onSave, onRemoveHistory }) => {
             if(!isOpen) return null;
-            // Destructure settings with defaults
-            const { 
-                tgToken = '', tgChatId = '', notifyDays = 7, 
-                backgroundImage = '', cardOpacity = 0.95,
-                bgPosY = 50, bgSize = 'cover' 
-            } = settings;
-
-            const [localSettings, setLocalSettings] = useState({
-                tgToken, tgChatId, notifyDays, backgroundImage, cardOpacity, bgPosY, bgSize
-            });
+            
+            const [localSettings, setLocalSettings] = useState(JSON.parse(JSON.stringify(settings)));
+            // Current tab in settings modal: 'active' | 'completed' | 'deleted'
+            const [currentTab, setCurrentTab] = useState('active');
             const [testStatus, setTestStatus] = useState(null);
             const fileInputRef = useRef(null);
 
-            const handleChange = (key, value) => {
+            // Get current view config, safe fallback
+            const currentViewConfig = localSettings.viewConfigs?.[currentTab] || { ...defaultViewConfig };
+
+            const handleGlobalChange = (key, value) => {
                 setLocalSettings(prev => ({ ...prev, [key]: value }));
+            };
+
+            const handleViewConfigChange = (key, value) => {
+                setLocalSettings(prev => ({
+                    ...prev,
+                    viewConfigs: {
+                        ...prev.viewConfigs,
+                        [currentTab]: {
+                            ...prev.viewConfigs[currentTab],
+                            [key]: value
+                        }
+                    }
+                }));
             };
 
             const handleSave = () => {
@@ -304,7 +337,7 @@
                 const file = e.target.files[0];
                 if(file) {
                     const base64 = await compressImage(file);
-                    handleChange('backgroundImage', base64);
+                    handleViewConfigChange('backgroundImage', base64);
                 }
             }
 
@@ -324,17 +357,35 @@
                 <div className="fixed inset-0 bg-slate-900/40 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-fade-in" onClick={onClose}>
                     <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl scale-100 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                         <h2 className="text-xl font-bold mb-6 flex items-center gap-2 text-slate-800"><CloudCog size={24} className="text-sky-500"/> 系統設定</h2>
+                        
                         <div className="space-y-5">
                             <div>
                                 <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 block">通知天數 (紅框顯示)</label>
-                                <input type="number" value={localSettings.notifyDays} onChange={e => handleChange('notifyDays', e.target.value)} className="w-full p-3 bg-slate-50 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-sky-400"/>
+                                <input type="number" value={localSettings.notifyDays} onChange={e => handleGlobalChange('notifyDays', e.target.value)} className="w-full p-3 bg-slate-50 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-sky-400"/>
                             </div>
                             
                             {/* Background Settings */}
                             <div className="border-t border-slate-100 pt-4">
-                                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">背景與外觀</label>
+                                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 block">外觀設定</label>
                                 
-                                <div className="space-y-4">
+                                {/* View Selector Tabs */}
+                                <div className="flex bg-slate-100 p-1 rounded-xl mb-4">
+                                    {[
+                                        {id: 'active', label: '待使用', icon: ListTodo},
+                                        {id: 'completed', label: '已使用', icon: CheckCircle2},
+                                        {id: 'deleted', label: '回收桶', icon: Trash}
+                                    ].map(tab => (
+                                        <button 
+                                            key={tab.id}
+                                            onClick={() => setCurrentTab(tab.id)}
+                                            className={`flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition-all ${currentTab === tab.id ? 'bg-white shadow text-sky-600' : 'text-slate-400 hover:text-slate-600'}`}
+                                        >
+                                            <tab.icon size={12} /> {tab.label}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                <div className="space-y-4 animate-fade-in">
                                     {/* History / Recent Backgrounds */}
                                     <div>
                                         <div className="text-xs font-bold text-slate-500 mb-2 flex justify-between">
@@ -345,11 +396,11 @@
                                             {bgHistory.map((bgUrl, idx) => (
                                                 <div key={idx} className="relative group">
                                                     <button 
-                                                        onClick={() => handleChange('backgroundImage', bgUrl)}
+                                                        onClick={() => handleViewConfigChange('backgroundImage', bgUrl)}
                                                         className="w-full h-12 rounded-lg bg-cover bg-center border border-slate-200 hover:scale-105 transition-transform shadow-sm"
                                                         style={{ backgroundImage: `url(${bgUrl})` }}
                                                     >
-                                                        {localSettings.backgroundImage === bgUrl && (
+                                                        {currentViewConfig.backgroundImage === bgUrl && (
                                                             <div className="absolute inset-0 bg-black/40 flex items-center justify-center rounded-lg">
                                                                 <Check size={16} className="text-white"/>
                                                             </div>
@@ -365,7 +416,7 @@
                                                 </div>
                                             ))}
                                             <button 
-                                                onClick={() => handleChange('backgroundImage', '')}
+                                                onClick={() => handleViewConfigChange('backgroundImage', '')}
                                                 className="w-full h-12 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-200 text-xs font-bold"
                                                 title="使用純白背景"
                                             >
@@ -376,7 +427,7 @@
 
                                     {/* Manual Upload */}
                                     <div className="space-y-2">
-                                        <input type="text" value={localSettings.backgroundImage} onChange={e => handleChange('backgroundImage', e.target.value)} placeholder="貼上圖片連結或使用下方上傳" className="w-full p-3 bg-slate-50 rounded-xl text-xs text-slate-600 outline-none focus:ring-2 focus:ring-sky-400"/>
+                                        <input type="text" value={currentViewConfig.backgroundImage} onChange={e => handleViewConfigChange('backgroundImage', e.target.value)} placeholder="貼上圖片連結或使用下方上傳" className="w-full p-3 bg-slate-50 rounded-xl text-xs text-slate-600 outline-none focus:ring-2 focus:ring-sky-400"/>
                                         <div className="flex gap-2">
                                             <button onClick={() => fileInputRef.current?.click()} className="flex-1 py-2 bg-sky-100 text-sky-600 rounded-xl text-xs font-bold hover:bg-sky-200 flex items-center justify-center gap-1">
                                                 <ImagePlus size={14}/> 上傳圖片
@@ -386,18 +437,18 @@
                                     </div>
 
                                     {/* Advanced Background Controls */}
-                                    {localSettings.backgroundImage && (
+                                    {currentViewConfig.backgroundImage && (
                                         <div className="bg-slate-50 p-3 rounded-xl space-y-3">
                                             {/* Position Y Slider */}
                                             <div>
                                                 <div className="flex justify-between items-center mb-1">
                                                     <label className="text-xs font-bold text-slate-500 flex items-center gap-1"><MoveVertical size={12}/> 垂直位置</label>
-                                                    <span className="text-xs font-bold text-sky-600">{localSettings.bgPosY}%</span>
+                                                    <span className="text-xs font-bold text-sky-600">{currentViewConfig.bgPosY}%</span>
                                                 </div>
                                                 <input 
                                                     type="range" min="0" max="100" step="1" 
-                                                    value={localSettings.bgPosY} 
-                                                    onChange={(e) => handleChange('bgPosY', parseInt(e.target.value))}
+                                                    value={currentViewConfig.bgPosY} 
+                                                    onChange={(e) => handleViewConfigChange('bgPosY', parseInt(e.target.value))}
                                                     className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-sky-500"
                                                 />
                                             </div>
@@ -415,8 +466,8 @@
                                                     ].map(opt => (
                                                         <button 
                                                             key={opt.val}
-                                                            onClick={() => handleChange('bgSize', opt.val)}
-                                                            className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-colors ${localSettings.bgSize === opt.val ? 'bg-sky-100 text-sky-600 border-sky-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-100'}`}
+                                                            onClick={() => handleViewConfigChange('bgSize', opt.val)}
+                                                            className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-colors ${currentViewConfig.bgSize === opt.val ? 'bg-sky-100 text-sky-600 border-sky-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-100'}`}
                                                         >
                                                             {opt.label}
                                                         </button>
@@ -428,9 +479,9 @@
                                             <div 
                                                 className="w-full h-24 rounded-xl bg-slate-200 border border-slate-300 overflow-hidden relative"
                                                 style={{
-                                                    backgroundImage: `url(${localSettings.backgroundImage})`,
-                                                    backgroundPosition: `center ${localSettings.bgPosY}%`,
-                                                    backgroundSize: localSettings.bgSize,
+                                                    backgroundImage: `url(${currentViewConfig.backgroundImage})`,
+                                                    backgroundPosition: `center ${currentViewConfig.bgPosY}%`,
+                                                    backgroundSize: currentViewConfig.bgSize,
                                                     backgroundRepeat: 'no-repeat'
                                                 }}
                                             >
@@ -439,32 +490,49 @@
                                         </div>
                                     )}
 
-                                    {/* Opacity Slider */}
-                                    <div className="bg-slate-50 p-3 rounded-xl">
-                                        <div className="flex justify-between items-center mb-2">
-                                            <label className="text-xs font-bold text-slate-500 flex items-center gap-1"><Droplets size={12}/> 卡片透明度</label>
-                                            <span className="text-xs font-bold text-sky-600">{Math.round(localSettings.cardOpacity * 100)}%</span>
+                                    {/* Opacity & Color */}
+                                    <div className="bg-slate-50 p-3 rounded-xl space-y-3">
+                                        {/* Color Picker */}
+                                        <div className="flex justify-between items-center">
+                                            <label className="text-xs font-bold text-slate-500 flex items-center gap-1"><Palette size={12}/> 卡片底色</label>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-[10px] font-mono text-slate-400">{currentViewConfig.cardBgColor}</span>
+                                                <input 
+                                                    type="color" 
+                                                    value={currentViewConfig.cardBgColor}
+                                                    onChange={e => handleViewConfigChange('cardBgColor', e.target.value)}
+                                                    className="w-6 h-6 rounded overflow-hidden border-none outline-none cursor-pointer"
+                                                />
+                                            </div>
                                         </div>
-                                        <input 
-                                            type="range" 
-                                            min="0.0" 
-                                            max="1.0" 
-                                            step="0.05" 
-                                            value={localSettings.cardOpacity} 
-                                            onChange={(e) => handleChange('cardOpacity', parseFloat(e.target.value))}
-                                            className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-sky-500"
-                                        />
+                                        
+                                        {/* Opacity Slider */}
+                                        <div>
+                                            <div className="flex justify-between items-center mb-2">
+                                                <label className="text-xs font-bold text-slate-500 flex items-center gap-1"><Droplets size={12}/> 卡片透明度</label>
+                                                <span className="text-xs font-bold text-sky-600">{Math.round(currentViewConfig.cardOpacity * 100)}%</span>
+                                            </div>
+                                            <input 
+                                                type="range" 
+                                                min="0.0" /* Request 3: allow 0% */
+                                                max="1.0" 
+                                                step="0.05" 
+                                                value={currentViewConfig.cardOpacity} 
+                                                onChange={(e) => handleViewConfigChange('cardOpacity', parseFloat(e.target.value))}
+                                                className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-sky-500"
+                                            />
+                                        </div>
                                     </div>
                                 </div>
                             </div>
 
                             <div className="border-t border-slate-100 pt-4">
                                 <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 block">Telegram Bot Token</label>
-                                <input type="text" value={localSettings.tgToken} onChange={e => handleChange('tgToken', e.target.value)} placeholder="123456:ABC-DEF..." className="w-full p-3 bg-slate-50 rounded-xl text-sm font-mono text-slate-600 outline-none focus:ring-2 focus:ring-sky-400"/>
+                                <input type="text" value={localSettings.tgToken} onChange={e => handleGlobalChange('tgToken', e.target.value)} placeholder="123456:ABC-DEF..." className="w-full p-3 bg-slate-50 rounded-xl text-sm font-mono text-slate-600 outline-none focus:ring-2 focus:ring-sky-400"/>
                             </div>
                             <div>
                                 <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 block">Telegram Chat ID</label>
-                                <input type="text" value={localSettings.tgChatId} onChange={e => handleChange('tgChatId', e.target.value)} placeholder="-123456789" className="w-full p-3 bg-slate-50 rounded-xl text-sm font-mono text-slate-600 outline-none focus:ring-2 focus:ring-sky-400"/>
+                                <input type="text" value={localSettings.tgChatId} onChange={e => handleGlobalChange('tgChatId', e.target.value)} placeholder="-123456789" className="w-full p-3 bg-slate-50 rounded-xl text-sm font-mono text-slate-600 outline-none focus:ring-2 focus:ring-sky-400"/>
                             </div>
                             
                             <button onClick={handleTest} disabled={!localSettings.tgToken || !localSettings.tgChatId || testStatus === 'sending'} 
@@ -558,7 +626,7 @@
             );
         };
 
-        const TicketCard = ({ ticket, onClick, notifyDays, isSelectionMode, isSelected, onSelect, isDuplicate, opacity = 0.95 }) => {
+        const TicketCard = ({ ticket, onClick, notifyDays, isSelectionMode, isSelected, onSelect, isDuplicate, opacity = 0.95, cardBgColor = '#ffffff' }) => {
             const isExpiring = !ticket.completed && ticket.expiry && checkIsExpiringSoon(ticket.expiry, notifyDays);
             
             const duplicateStyle = isDuplicate && !ticket.completed && !ticket.isDeleted 
@@ -566,9 +634,17 @@
                 : '';
 
             // Dynamic Background calculation
-            const bgColor = isSelected ? `rgba(240, 249, 255, ${opacity})` : // sky-50 (r=240, g=249, b=255)
-                            (isExpiring && !ticket.completed && !ticket.isDeleted) ? `rgba(254, 242, 242, ${opacity})` : // red-50 (r=254, g=242, b=242)
-                            `rgba(255, 255, 255, ${opacity})`; // white
+            const { r, g, b } = hexToRgb(cardBgColor);
+            
+            let bgBase = `rgba(${r}, ${g}, ${b}, ${opacity})`;
+            
+            // Overrides for states (light tint on top of custom color if selected/expiring)
+            // But if user sets opacity to 0, these tints might look weird floating. 
+            // Strategy: Use a solid color overlay with opacity if state active.
+            let overlayClass = '';
+            if (isSelected) overlayClass = 'bg-sky-500/10 ring-2 ring-sky-500 border-sky-500';
+            else if (isExpiring && !ticket.completed && !ticket.isDeleted) overlayClass = 'bg-red-500/10 border-red-400 shadow-red-100';
+            else overlayClass = 'border-slate-100 hover:border-sky-200 hover:shadow-md';
 
             return (
                 <div 
@@ -576,10 +652,8 @@
                         if(isSelectionMode) onSelect(ticket.id);
                         else onClick(ticket);
                     }}
-                    style={{ backgroundColor: bgColor }}
-                    className={`backdrop-blur-sm mx-4 mt-4 p-4 rounded-3xl shadow-sm border flex gap-4 active:scale-[0.98] transition-all cursor-pointer relative overflow-hidden group 
-                    ${isSelected ? 'ring-2 ring-sky-500 border-sky-500' : isExpiring ? 'border-red-400 shadow-red-100' : 'border-slate-100 hover:border-sky-200 hover:shadow-md'}
-                    ${duplicateStyle}`}
+                    style={{ backgroundColor: bgBase }}
+                    className={`backdrop-blur-sm mx-4 mt-4 p-4 rounded-3xl shadow-sm border flex gap-4 active:scale-[0.98] transition-all cursor-pointer relative overflow-hidden group ${overlayClass} ${duplicateStyle}`}
                 >
                     {isSelectionMode && (
                         <div className={`absolute top-3 right-3 z-20 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-sky-500 border-sky-500' : 'border-slate-300 bg-white'}`}>
@@ -640,16 +714,6 @@
                             )}
                         </div>
                     </div>
-                    
-                    {/* Rip Effect circles need background color update dynamically if possible, but keep simple for now */}
-                    <div className="ticket-rip-l" style={{backgroundColor: 'transparent', boxShadow: 'none', borderLeft: '6px solid transparent'}}></div> 
-                    {/* The original rip effect was dependent on exact bg match. With custom BG, it's tricky. 
-                        Let's simplify it or just hide it if it looks bad. For now, kept but might look odd on custom BG. 
-                        Actually, let's just make it white to match card if we can't match BG.
-                        Wait, the rip is ON the card, eating INTO it. The color should match the BACKGROUND BEHIND the card.
-                        Since BG is dynamic, we can't easily do CSS.
-                        Alternative: Removing rip effect to avoid visual glitches on custom background.
-                    */}
                 </div>
             );
         };
@@ -990,12 +1054,54 @@
             const [selectedIds, setSelectedIds] = useState(new Set());
             const [showBatchModal, setShowBatchModal] = useState(false);
 
-            // Settings
-            const [settings, setSettings] = useState(() => JSON.parse(localStorage.getItem('wallet_settings_v3')) || { 
-                tgToken: '', tgChatId: '', notifyDays: 7, appTitle: '我的票夾', 
-                backgroundImage: '', cardOpacity: 0.95,
-                bgPosY: 50, bgSize: 'cover' 
+            // Settings State Initialization with Migration Logic
+            const [settings, setSettings] = useState(() => {
+                const saved = JSON.parse(localStorage.getItem('wallet_settings_v3'));
+                const defaults = { 
+                    tgToken: '', tgChatId: '', notifyDays: 7, appTitle: '我的票夾',
+                    viewConfigs: {
+                        active: { ...defaultViewConfig },
+                        completed: { ...defaultViewConfig },
+                        deleted: { ...defaultViewConfig }
+                    }
+                };
+
+                if (!saved) return defaults;
+
+                // Migration: If old flat structure exists, move it to 'active' view config
+                if (saved.backgroundImage !== undefined || saved.cardOpacity !== undefined) {
+                    return {
+                        ...defaults,
+                        tgToken: saved.tgToken || '',
+                        tgChatId: saved.tgChatId || '',
+                        notifyDays: saved.notifyDays || 7,
+                        appTitle: saved.appTitle || '我的票夾',
+                        viewConfigs: {
+                            active: {
+                                backgroundImage: saved.backgroundImage || '',
+                                cardOpacity: saved.cardOpacity !== undefined ? saved.cardOpacity : 0.95,
+                                bgPosY: saved.bgPosY || 50,
+                                bgSize: saved.bgSize || 'cover',
+                                cardBgColor: '#ffffff'
+                            },
+                            completed: { ...defaultViewConfig }, // Use defaults for others initially
+                            deleted: { ...defaultViewConfig }
+                        }
+                    };
+                }
+
+                // If already migrated structure
+                return {
+                    ...defaults,
+                    ...saved,
+                    viewConfigs: {
+                        active: { ...defaultViewConfig, ...saved.viewConfigs?.active },
+                        completed: { ...defaultViewConfig, ...saved.viewConfigs?.completed },
+                        deleted: { ...defaultViewConfig, ...saved.viewConfigs?.deleted },
+                    }
+                };
             });
+
             // Background History State
             const [bgHistory, setBgHistory] = useState(() => JSON.parse(localStorage.getItem('wallet_bg_history_v3')) || []);
 
@@ -1108,16 +1214,7 @@
                 const backupData = {
                     version: 3,
                     timestamp: Date.now(),
-                    settings: { 
-                        tgToken: settings.tgToken, 
-                        tgChatId: settings.tgChatId, 
-                        notifyDays: settings.notifyDays,
-                        appTitle: settings.appTitle,
-                        backgroundImage: settings.backgroundImage,
-                        cardOpacity: settings.cardOpacity,
-                        bgPosY: settings.bgPosY,
-                        bgSize: settings.bgSize
-                    },
+                    settings: settings, // Stores the new structure
                     tasks: tasks
                 };
                 const blob = new Blob([JSON.stringify(backupData, null, 2)], {type: "application/json"});
@@ -1190,11 +1287,20 @@
             // Custom wrapper for saving settings to handle history
             const handleSaveSettings = (newSettings) => {
                 setSettings(newSettings);
-                // If background image is set and different, add to history
-                if (newSettings.backgroundImage) {
+                
+                // Collect images from all view configs to update history
+                const imagesToAdd = [
+                    newSettings.viewConfigs.active.backgroundImage,
+                    newSettings.viewConfigs.completed.backgroundImage,
+                    newSettings.viewConfigs.deleted.backgroundImage
+                ].filter(Boolean); // Remove empty strings
+
+                if (imagesToAdd.length > 0) {
                     setBgHistory(prev => {
-                        const filtered = prev.filter(img => img !== newSettings.backgroundImage);
-                        return [newSettings.backgroundImage, ...filtered].slice(0, 6); // Keep last 6
+                        // Merge current history with new images, removing duplicates
+                        const combined = [...imagesToAdd, ...prev];
+                        const unique = [...new Set(combined)];
+                        return unique.slice(0, 20); // Request 6: increased to 20
                     });
                 }
             };
@@ -1205,16 +1311,19 @@
                 }
             };
 
+            // Get current view config based on 'view' state
+            const currentConfig = settings.viewConfigs[view] || defaultViewConfig;
+
             return (
                 <>
                     {/* 1. Fixed Background Layer */}
-                    {settings.backgroundImage && (
+                    {currentConfig.backgroundImage && (
                         <div 
                             className="fixed inset-0 z-0 mx-auto max-w-md transition-all duration-500"
                             style={{
-                                backgroundImage: `url(${settings.backgroundImage})`,
-                                backgroundSize: settings.bgSize || 'cover',
-                                backgroundPosition: `center ${settings.bgPosY || 50}%`,
+                                backgroundImage: `url(${currentConfig.backgroundImage})`,
+                                backgroundSize: currentConfig.bgSize || 'cover',
+                                backgroundPosition: `center ${currentConfig.bgPosY || 50}%`,
                                 backgroundRepeat: 'no-repeat',
                             }}
                         />
@@ -1224,7 +1333,7 @@
                     <div 
                         className="max-w-md mx-auto min-h-screen relative pb-28 shadow-2xl sm:border-x border-slate-200 transition-all duration-500 z-10"
                         style={{
-                            backgroundColor: settings.backgroundImage ? 'transparent' : '#fff',
+                            backgroundColor: currentConfig.backgroundImage ? 'transparent' : '#fff',
                         }}
                     >
                         <Header 
@@ -1244,7 +1353,7 @@
                         
                         <TagTabs activeTag={activeTag} setActiveTag={setActiveTag} tags={allTags} onManageTags={() => setShowTagManager(true)}/>
                         
-                        <div className={`pb-8 min-h-[50vh] pt-2 transition-colors ${settings.backgroundImage ? 'bg-slate-50/50' : 'bg-slate-50'}`}>
+                        <div className={`pb-8 min-h-[50vh] pt-2 transition-colors ${currentConfig.backgroundImage ? 'bg-slate-50/50' : 'bg-slate-50'}`}>
                             {filteredTasks.length > 0 ? (
                                 filteredTasks.map(ticket => (
                                     <TicketCard 
@@ -1252,7 +1361,8 @@
                                         onClick={setSelectedTicket} notifyDays={settings.notifyDays}
                                         isSelectionMode={isSelectionMode} isSelected={selectedIds.has(ticket.id)} onSelect={handleSelect}
                                         isDuplicate={duplicateSerials.has(ticket.serial)}
-                                        opacity={settings.cardOpacity}
+                                        opacity={currentConfig.cardOpacity}
+                                        cardBgColor={currentConfig.cardBgColor}
                                     />
                                 ))
                             ) : (
