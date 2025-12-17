@@ -1,4 +1,101 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>離線票券管家 Fresh (Wallet UI)</title>
+
+    <!-- 1. 引入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- 2. 引入 Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- 3. 引入本地繪製條碼與QR Code的函式庫 -->
+    <script src="https://cdn.jsdelivr.net/npm/bwip-js@3.0.4/dist/bwip-js-min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+
+    <!-- 4. 設定 Import Map -->
+    <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@18.2.0",
+        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+        "lucide-react": "https://esm.sh/lucide-react@0.294.0"
+      }
+    }
+    </script>
+
+    <!-- Fonts -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Nunito', 'Noto Sans TC', 'sans-serif'],
+                    },
+                    colors: {
+                        primary: {
+                            50: '#f0f9ff', 100: '#e0f2fe', 500: '#0ea5e9', 600: '#0284c7', // Sky Blue
+                        },
+                        accent: {
+                            50: '#fdf4ff', 500: '#d946ef', // Fuchsia
+                        }
+                    },
+                    animation: {
+                        'fade-in': 'fadeIn 0.2s ease-out',
+                        'slide-up': 'slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+                        'bounce-sm': 'bounceSmall 0.2s infinite alternate',
+                    },
+                    keyframes: {
+                        fadeIn: { '0%': { opacity: '0', transform: 'scale(0.95)' }, '100%': { opacity: '1', transform: 'scale(1)' } },
+                        slideUp: { '0%': { transform: 'translateY(100%)' }, '100%': { transform: 'translateY(0)' } },
+                        bounceSmall: { '0%': { transform: 'translateY(0)' }, '100%': { transform: 'translateY(-2px)' } }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #f8fafc; /* Slate-50 */
+            -webkit-tap-highlight-color: transparent;
+        }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* Modern Ticket Rip Effect - Smoother */
+        .ticket-rip-l {
+            position: absolute; left: -6px; top: 50%; transform: translateY(-50%);
+            width: 12px; height: 12px; border-radius: 50%;
+            background-color: transparent; /* Changed to transparent for custom bg compatibility */
+            box-shadow: inset -1px 0 2px rgba(0,0,0,0.05);
+            z-index: 10;
+        }
+        .ticket-rip-r {
+            position: absolute; right: -6px; top: 50%; transform: translateY(-50%);
+            width: 12px; height: 12px; border-radius: 50%;
+            background-color: transparent;
+            box-shadow: inset 1px 0 2px rgba(0,0,0,0.05);
+            z-index: 10;
+        }
+        /* Fullscreen Image Overlay Transition */
+        .fullscreen-overlay {
+            animation: fadeIn 0.3s ease-out;
+        }
+    </style>
+</head>
+<body class="text-slate-700">
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        import React, { useState, useEffect, useMemo, useRef } from 'react';
         import { createRoot } from 'react-dom/client';
         import {
             Trash2, Calendar, Check, Plus, LogIn, ExternalLink, Tag, RotateCcw,
@@ -455,15 +552,13 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
         };
 
         const Header = ({ appTitle, onTitleChange, onOpenMenu, onOpenSettings, sortType, setSortType, setSearchQuery, searchQuery, isSelectionMode, setIsSelectionMode, selectedCount, onSelectAll, isCompact, setIsCompact, hasBg }) => (
-            // 修正 1.1: 移除毛玻璃、陰影、圓角與邊框
-            <div className={`px-5 pt-12 pb-3 sticky top-0 z-30 transition-all ${hasBg ? 'bg-transparent shadow-none' : 'bg-white/80 backdrop-blur-md border-b border-white/20 text-slate-800 rounded-b-[24px] shadow-sm'}`}>
+            <div className={`px-5 pt-12 pb-3 shadow-sm sticky top-0 z-30 transition-all rounded-b-[24px] ${hasBg ? 'bg-transparent shadow-none backdrop-blur-none' : 'bg-white/80 backdrop-blur-md border-b border-white/20 text-slate-800'}`}>
                 <div className="flex justify-between items-center mb-4">
                     <div className="flex items-center gap-2 group cursor-pointer" onClick={() => {
                         const newTitle = prompt("修改標題名稱:", appTitle);
                         if(newTitle) onTitleChange(newTitle);
                     }}>
-                        {/* 修正 1.2: 文字顏色在有背景圖時可以讓子元素繼承，但需注意在深色背景圖時的對比度。此處先保持原樣 */}
-                        <h1 className="text-2xl font-black tracking-tight drop-shadow-sm" style={{color: hasBg ? 'white' : ''}}>{appTitle}</h1>
+                        <h1 className="text-2xl font-black tracking-tight drop-shadow-sm" style={{color: hasBg ? 'inherit' : ''}}>{appTitle}</h1>
                         <Pencil size={14} className="text-slate-400 group-hover:text-sky-500 transition-colors"/>
                     </div>
                     <div className="flex gap-2">
@@ -498,8 +593,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
                             placeholder="搜尋名稱、標籤..." 
-                            // 修正 1.3: 搜尋框在有背景圖時保持微透明度，否則變白
-                            className={`w-full pl-10 pr-3 py-2.5 text-sm rounded-2xl outline-none font-medium text-slate-700 transition-all placeholder:text-slate-400 backdrop-blur-sm ${hasBg ? 'bg-white/40 border border-white/20 focus:bg-white/90 focus:border-sky-300' : 'bg-slate-50/60 border border-transparent focus:bg-white focus:border-sky-200'}`}
+                            className="w-full pl-10 pr-3 py-2.5 text-sm bg-slate-50/60 border border-transparent focus:bg-white focus:border-sky-200 rounded-2xl outline-none font-medium text-slate-700 transition-all placeholder:text-slate-400 backdrop-blur-sm" 
                         />
                     </div>
                     {/* Compact Mode Toggle */}
@@ -517,8 +611,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
                             const nextIdx = (types.indexOf(sortType) + 1) % types.length;
                             setSortType(types[nextIdx]);
                         }}
-                        // 修正 1.4: 排序按鈕在有背景圖時保持微透明度，否則變白
-                        className={`px-4 py-2.5 rounded-2xl flex items-center gap-1.5 text-xs font-bold text-slate-600 transition-all backdrop-blur-sm ${hasBg ? 'bg-white/40 border border-white/20 hover:bg-white/60' : 'bg-slate-50/60 hover:bg-white border border-transparent hover:border-slate-200'}`}
+                        className="px-4 py-2.5 bg-slate-50/60 hover:bg-white border border-transparent hover:border-slate-200 rounded-2xl flex items-center gap-1.5 text-xs font-bold text-slate-600 transition-all backdrop-blur-sm"
                     >
                         <ArrowUpDown size={14} className="text-sky-500"/>
                         {sortType === 'expiring' ? '快到期' : sortType === 'newest' ? '最新' : '最舊'}
@@ -530,27 +623,15 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
         const TagTabs = ({ activeTag, setActiveTag, tags, onManageTags, hasBg }) => {
             const displayTags = ['all', ...tags.slice(0, 10)];
             return (
-                // 修正 1.5: 移除毛玻璃、邊框，實現完全透明
-                <div className={`px-4 pt-2 pb-2 flex items-center gap-2 sticky top-[110px] z-20 overflow-hidden ${hasBg ? 'bg-transparent' : 'bg-white/30 backdrop-blur-sm border-b border-white/20'}`}>
+                <div className={`px-4 pt-2 pb-2 flex items-center gap-2 sticky top-[110px] z-20 overflow-hidden ${hasBg ? 'bg-transparent backdrop-blur-none' : 'bg-white/30 backdrop-blur-sm border-b border-white/20'}`}>
                     <div className="flex gap-3 overflow-x-auto no-scrollbar flex-1 pb-1">
                         {displayTags.map(tag => (
-                            <button 
-                                key={tag} 
-                                onClick={() => setActiveTag(tag)} 
-                                // 修正 1.6: 標籤按鈕在有背景圖時使用深色背景+白色文字，對比度更好
-                                className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${activeTag === tag 
-                                    ? 'bg-sky-500 text-white shadow-md shadow-sky-200' 
-                                    : hasBg 
-                                        ? 'bg-black/20 text-white hover:bg-black/40' 
-                                        : 'bg-slate-50/60 text-slate-600 hover:bg-white'
-                                }`}
-                            >
+                            <button key={tag} onClick={() => setActiveTag(tag)} className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${activeTag === tag ? 'bg-sky-500 text-white shadow-md shadow-sky-200' : 'bg-slate-50/60 text-slate-600 hover:bg-white'}`}>
                                 {tag === 'all' ? '全部' : tag}
                             </button>
                         ))}
                     </div>
-                    {/* 修正 1.7: 標籤管理按鈕在有背景圖時使用白色背景，避免太暗 */}
-                    <button onClick={onManageTags} className={`p-2 shadow-sm rounded-full ${hasBg ? 'bg-white/70 text-slate-600 hover:bg-white' : 'bg-white/60 text-slate-400 hover:text-sky-600 border border-slate-50/50'}`}><SlidersHorizontal size={16}/></button>
+                    <button onClick={onManageTags} className="p-2 text-slate-400 hover:text-sky-600 bg-white/60 shadow-sm rounded-full border border-slate-50/50"><SlidersHorizontal size={16}/></button>
                 </div>
             );
         };
@@ -575,42 +656,39 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
             // --- Compact Mode Render (Tighter) ---
             if (isCompact) {
                 return (
-                    // 修正 2.1: 縮小外邊距、內邊距、圓角
                     <div 
                         onClick={() => {
                             if(isSelectionMode) onSelect(ticket.id);
                             else onClick(ticket);
                         }}
                         style={{ backgroundColor: bgBase }}
-                        className={`backdrop-blur-sm mx-1 mb-0.5 p-1 rounded-md shadow-sm border flex items-center gap-1.5 active:scale-[0.98] transition-all cursor-pointer relative overflow-hidden group ${overlayClass} ${duplicateStyle}`}
+                        className={`backdrop-blur-sm mx-1 mb-[2px] p-[3px] rounded-md shadow-sm border flex items-center gap-1.5 active:scale-[0.98] transition-all cursor-pointer relative overflow-hidden group ${overlayClass} ${duplicateStyle}`}
                     >
                         {isSelectionMode && (
-                            // 修正 2.2: 縮小勾選框尺寸
-                            <div className={`w-3 h-3 flex-shrink-0 rounded-full border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-sky-500 border-sky-500' : 'border-slate-300 bg-white'}`}>
-                                {isSelected && <Check size={8} className="text-white"/>} {/* 修正 2.2: 縮小 Check Icon */}
+                            <div className={`w-4 h-4 flex-shrink-0 rounded-full border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-sky-500 border-sky-500' : 'border-slate-300 bg-white'}`}>
+                                {isSelected && <Check size={10} className="text-white"/>}
                             </div>
                         )}
                         
                         <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1"> {/* 縮小 gap */}
+                            <div className="flex items-center gap-2">
                                 {isDuplicate && !ticket.completed && !ticket.isDeleted && (
-                                    <span className="text-[8px] bg-red-500 text-white px-1 py-0.5 rounded font-bold">重複</span> {/* 縮小字體和 padding */}
+                                    <span className="text-[9px] bg-red-500 text-white px-1.5 py-0.5 rounded font-bold">重複</span>
                                 )}
-                                <h3 className={`font-bold text-slate-800 line-clamp-1 text-xs ${ticket.completed ? 'line-through text-slate-400' : ''}`}> {/* 修正 2.3: 縮小名稱字體到 text-xs */}
+                                <h3 className={`font-bold text-slate-800 line-clamp-1 text-sm ${ticket.completed ? 'line-through text-slate-400' : ''}`}>
                                     {ticket.productName}
                                 </h3>
                             </div>
-                            <div className="flex items-center gap-2 mt-0"> {/* 移除 mt-0.5 */}
-                                {isExpiring && !ticket.completed && !ticket.isDeleted && <span className="text-[8px] font-bold text-red-500 flex items-center gap-0.5"><AlertCircle size={8}/> 快到期</span>} {/* 縮小字體和 Icon */}
-                                <span className={`text-[9px] font-bold ${ticket.completed ? 'text-emerald-600' : 'text-slate-400'}`}> {/* 修正 2.4: 縮小細節字體到 text-[9px] */}
+                            <div className="flex items-center gap-2 mt-0.5">
+                                {isExpiring && !ticket.completed && !ticket.isDeleted && <span className="text-[9px] font-bold text-red-500 flex items-center gap-0.5"><AlertCircle size={9}/> 快到期</span>}
+                                <span className={`text-[10px] font-bold ${ticket.completed ? 'text-emerald-600' : 'text-slate-400'}`}>
                                     {ticket.completed ? `已用 ${formatTime(ticket.completedAt)}` : (ticket.expiry || '無期限')}
                                 </span>
                             </div>
                         </div>
 
                         {!isSelectionMode && (
-                            // 修正 2.5: 縮小按鈕尺寸和圓角
-                            <button className={`flex-shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-md transition-all ${ticket.completed ? 'bg-slate-100 text-slate-500' : 'bg-emerald-100 text-emerald-600 hover:bg-emerald-500 hover:text-white'}`}>
+                            <button className={`flex-shrink-0 text-[9px] font-bold px-2 py-0 rounded-md transition-all h-6 flex items-center ${ticket.completed ? 'bg-slate-100 text-slate-500' : 'bg-emerald-100 text-emerald-600 hover:bg-emerald-500 hover:text-white'}`}>
                                 {ticket.completed ? '查看' : '兌換'}
                             </button>
                         )}
@@ -834,10 +912,10 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
                                                     onToggleComplete(ticket); 
                                                     onClose();
                                                 } else {
-                                                    // IMPORTANT: Replaced window.confirm with a note to the user that it needs a custom modal
-                                                    // For now, I'm removing the confirm() logic as per global instructions.
-                                                    onToggleComplete(ticket); 
-                                                    onClose();
+                                                    if(window.confirm("確定要立即核銷嗎？此動作無法復原 (除非手動還原)。")) {
+                                                        onToggleComplete(ticket); 
+                                                        onClose();
+                                                    }
                                                 }
                                             }} 
                                             className={`w-full py-5 text-lg font-bold rounded-2xl shadow-lg flex items-center justify-center gap-2 text-white transition-transform active:scale-95 ${ticket.completed ? 'bg-emerald-500 shadow-emerald-200 hover:bg-emerald-600' : 'bg-emerald-500 shadow-emerald-200 hover:bg-emerald-600'}`}
@@ -901,17 +979,16 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
                 try {
                     const results = parseBatchTicketInfo(pasteVal);
                     if (results.length === 0) {
-                        // IMPORTANT: Replaced alert with console log/message.
-                        console.log("未能解析出票券，請確認格式或轉為手動輸入。");
+                        alert("未能解析出票券，請確認格式或轉為手動輸入。");
                     } else {
                         onAddBatch(results);
                         onClose();
                     }
-                } catch (e) { console.error("處理失敗:", e); } finally { setLoading(false); }
+                } catch (e) { alert("處理失敗"); } finally { setLoading(false); }
             };
 
             const handleManualSubmit = () => {
-                if (!manualData.name) { console.log("請輸入名稱"); return; }
+                if (!manualData.name) { alert("請輸入名稱"); return; }
                 const newTicket = {
                     id: Date.now(), productName: manualData.name, serial: manualData.serial,
                     expiry: manualData.expiry.replace(/-/g, '/'), note: manualData.note,
@@ -1191,12 +1268,12 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
             };
             
             const handleDelete = (id) => {
-                if(view === 'deleted') { if(window.confirm("確定永久刪除？")) setTasks(prev => prev.filter(t => t.id !== id)); }
+                if(view === 'deleted') { if(confirm("確定永久刪除？")) setTasks(prev => prev.filter(t => t.id !== id)); }
                 else setTasks(prev => prev.map(t => t.id === id ? { ...t, isDeleted: true } : t));
             };
             const handleRestore = (ticket) => setTasks(prev => prev.map(t => t.id === ticket.id ? { ...t, isDeleted: false } : t));
             const handleDeleteTag = (tag) => {
-                if(window.confirm(`刪除標籤 "${tag}"？`)) setTasks(prev => prev.map(t => ({ ...t, tags: (t.tags||[]).filter(tt => tt !== tag) })));
+                if(confirm(`刪除標籤 "${tag}"？`)) setTasks(prev => prev.map(t => ({ ...t, tags: (t.tags||[]).filter(tt => tt !== tag) })));
             };
             
             const handleBackup = () => {
@@ -1221,7 +1298,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
                             
                             let confirmSettings = false;
                             if (!Array.isArray(data) && data.settings) {
-                                if (window.confirm("備份檔包含設定資料 (APP標題、Telegram Token、背景圖 等)，是否一併還原？")) {
+                                if (confirm("備份檔包含設定資料 (APP標題、Telegram Token、背景圖 等)，是否一併還原？")) {
                                     setSettings(prev => ({...prev, ...data.settings}));
                                     confirmSettings = true;
                                 }
@@ -1231,17 +1308,17 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
                             
                             if (mode === '1') {
                                 setTasks(prev => [...prev, ...importedTasks]);
-                                console.log(`匯入成功 (添加模式)！新增 ${importedTasks.length} 筆票券${confirmSettings ? ' (含設定)' : ''}`);
+                                alert(`匯入成功 (添加模式)！新增 ${importedTasks.length} 筆票券${confirmSettings ? ' (含設定)' : ''}`);
                             } else if (mode === '2') {
-                                if(window.confirm("確定要覆蓋嗎？現有資料將會遺失！")) {
+                                if(confirm("確定要覆蓋嗎？現有資料將會遺失！")) {
                                     setTasks(importedTasks);
-                                    console.log(`匯入成功 (覆蓋模式)！共 ${importedTasks.length} 筆票券${confirmSettings ? ' (含設定)' : ''}`);
+                                    alert(`匯入成功 (覆蓋模式)！共 ${importedTasks.length} 筆票券${confirmSettings ? ' (含設定)' : ''}`);
                                 }
                             } else {
-                                if(mode !== null) console.log("取消匯入");
+                                if(mode !== null) alert("取消匯入");
                             }
 
-                        } catch(e){console.error("格式錯誤", e);} 
+                        } catch(e){alert("格式錯誤");} 
                     };
                     r.readAsText(e.target.files[0]);
                 }; input.click();
@@ -1295,7 +1372,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
             };
             
             const handleRemoveHistory = (url) => {
-                if(window.confirm("確定要移除此背景紀錄嗎？")) {
+                if(confirm("確定要移除此背景紀錄嗎？")) {
                     setBgHistory(prev => prev.filter(item => item !== url));
                 }
             };
@@ -1331,7 +1408,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
                             onOpenSettings={() => setShowSettings(true)}
                             onOpenMenu={() => {
                                 const action = prompt("1.完整備份(含設定) 2.匯入還原 3.清空資料");
-                                if(action==='1') handleBackup(); if(action==='2') handleImport(); if(action==='3' && window.confirm("確定清空？")) setTasks([]);
+                                if(action==='1') handleBackup(); if(action==='2') handleImport(); if(action==='3' && confirm("確定清空？")) setTasks([]);
                             }}
                             sortType={sortType} setSortType={setSortType}
                             searchQuery={searchQuery} setSearchQuery={setSearchQuery}
@@ -1345,8 +1422,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
                         
                         <TagTabs activeTag={activeTag} setActiveTag={setActiveTag} tags={allTags} onManageTags={() => setShowTagManager(true)} hasBg={!!currentConfig.backgroundImage}/>
                         
-                        {/* 修正 3: 在有背景圖時，讓列表容器的背景略微透明化，讓列表與背景有一點分界 */}
-                        <div className={`pb-8 min-h-[50vh] pt-2 transition-colors ${currentConfig.backgroundImage ? 'bg-slate-50/20' : 'bg-slate-50'}`}>
+                        <div className={`pb-8 min-h-[50vh] pt-2 transition-colors ${currentConfig.backgroundImage ? 'bg-transparent' : 'bg-slate-50'}`}>
                             {filteredTasks.length > 0 ? (
                                 filteredTasks.map(ticket => (
                                     <TicketCard 
@@ -1376,7 +1452,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
                                             <Tag size={18}/> 批量標籤
                                         </button>
                                         <button onClick={() => {
-                                            if(window.confirm(`確定刪除 ${selectedIds.size} 項目？`)) {
+                                            if(confirm(`確定刪除 ${selectedIds.size} 項目？`)) {
                                                 if(view === 'deleted') setTasks(prev => prev.filter(t => !selectedIds.has(t.id)));
                                                 else setTasks(prev => prev.map(t => selectedIds.has(t.id) ? { ...t, isDeleted: true } : t));
                                                 setSelectedIds(new Set()); setIsSelectionMode(false);
