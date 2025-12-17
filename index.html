@@ -106,7 +106,8 @@
             LayoutDashboard, Moon, Sun, ChevronUp, ChevronDown, Filter, AlertOctagon, CheckSquareIcon,
             Bell, BellRing, Send, UserCheck, CloudCog, Maximize2, Wand2, WifiOff, FileUp, Replace, FilePlus2, RefreshCw,
             ImagePlus, Heart, HeartHandshake, Eye, EyeOff, Globe, BookOpen, Star, History, MousePointerClick, Layers,
-            CalendarX2, CopyPlus, Lightbulb, Loader2, QrCode, SlidersHorizontal, ArrowUpDown, Image, CheckCheck, SendHorizontal, XCircle, Droplets
+            CalendarX2, CopyPlus, Lightbulb, Loader2, QrCode, SlidersHorizontal, ArrowUpDown, Image, CheckCheck, SendHorizontal, XCircle, Droplets,
+            MoveVertical, BoxSelect, Monitor
         } from 'lucide-react';
 
         // --- 1. Core Logic (Helpers) ---
@@ -275,18 +276,27 @@
             );
         };
 
-        const SettingsModal = ({ isOpen, onClose, tgToken, setTgToken, tgChatId, setTgChatId, notifyDays, setNotifyDays, backgroundImage, setBackgroundImage, cardOpacity, setCardOpacity, onSave }) => {
+        const SettingsModal = ({ isOpen, onClose, settings, bgHistory, onSave, onRemoveHistory }) => {
             if(!isOpen) return null;
-            const [localToken, setLocalToken] = useState(tgToken);
-            const [localChatId, setLocalChatId] = useState(tgChatId);
-            const [localDays, setLocalDays] = useState(notifyDays);
-            const [localBg, setLocalBg] = useState(backgroundImage || '');
-            const [localOpacity, setLocalOpacity] = useState(cardOpacity || 0.95);
+            // Destructure settings with defaults
+            const { 
+                tgToken = '', tgChatId = '', notifyDays = 7, 
+                backgroundImage = '', cardOpacity = 0.95,
+                bgPosY = 50, bgSize = 'cover' 
+            } = settings;
+
+            const [localSettings, setLocalSettings] = useState({
+                tgToken, tgChatId, notifyDays, backgroundImage, cardOpacity, bgPosY, bgSize
+            });
             const [testStatus, setTestStatus] = useState(null);
             const fileInputRef = useRef(null);
 
+            const handleChange = (key, value) => {
+                setLocalSettings(prev => ({ ...prev, [key]: value }));
+            };
+
             const handleSave = () => {
-                onSave({ tgToken: localToken, tgChatId: localChatId, notifyDays: localDays, backgroundImage: localBg, cardOpacity: localOpacity });
+                onSave(localSettings);
                 onClose();
             };
 
@@ -294,13 +304,13 @@
                 const file = e.target.files[0];
                 if(file) {
                     const base64 = await compressImage(file);
-                    setLocalBg(base64);
+                    handleChange('backgroundImage', base64);
                 }
             }
 
             const handleTest = async () => {
                 setTestStatus('sending');
-                const result = await sendTelegramMessage(localToken, localChatId, "🔔 這是一則來自「離線票券管家」的測試訊息。");
+                const result = await sendTelegramMessage(localSettings.tgToken, localSettings.tgChatId, "🔔 這是一則來自「離線票券管家」的測試訊息。");
                 if (result.success) {
                     setTestStatus('success');
                     setTimeout(() => setTestStatus(null), 3000);
@@ -317,65 +327,147 @@
                         <div className="space-y-5">
                             <div>
                                 <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 block">通知天數 (紅框顯示)</label>
-                                <input type="number" value={localDays} onChange={e => setLocalDays(e.target.value)} className="w-full p-3 bg-slate-50 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-sky-400"/>
+                                <input type="number" value={localSettings.notifyDays} onChange={e => handleChange('notifyDays', e.target.value)} className="w-full p-3 bg-slate-50 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-sky-400"/>
                             </div>
                             
                             {/* Background Settings */}
                             <div className="border-t border-slate-100 pt-4">
                                 <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">背景與外觀</label>
+                                
                                 <div className="space-y-4">
+                                    {/* History / Recent Backgrounds */}
+                                    <div>
+                                        <div className="text-xs font-bold text-slate-500 mb-2 flex justify-between">
+                                            <span>曾經使用的背景</span>
+                                            {bgHistory.length === 0 && <span className="text-slate-300 font-normal">尚無紀錄</span>}
+                                        </div>
+                                        <div className="grid grid-cols-4 gap-2 mb-2">
+                                            {bgHistory.map((bgUrl, idx) => (
+                                                <div key={idx} className="relative group">
+                                                    <button 
+                                                        onClick={() => handleChange('backgroundImage', bgUrl)}
+                                                        className="w-full h-12 rounded-lg bg-cover bg-center border border-slate-200 hover:scale-105 transition-transform shadow-sm"
+                                                        style={{ backgroundImage: `url(${bgUrl})` }}
+                                                    >
+                                                        {localSettings.backgroundImage === bgUrl && (
+                                                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center rounded-lg">
+                                                                <Check size={16} className="text-white"/>
+                                                            </div>
+                                                        )}
+                                                    </button>
+                                                    <button 
+                                                        onClick={(e) => { e.stopPropagation(); onRemoveHistory(bgUrl); }}
+                                                        className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                                                        title="移除此紀錄"
+                                                    >
+                                                        <X size={10}/>
+                                                    </button>
+                                                </div>
+                                            ))}
+                                            <button 
+                                                onClick={() => handleChange('backgroundImage', '')}
+                                                className="w-full h-12 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-200 text-xs font-bold"
+                                                title="使用純白背景"
+                                            >
+                                                無
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Manual Upload */}
                                     <div className="space-y-2">
-                                        <input type="text" value={localBg} onChange={e => setLocalBg(e.target.value)} placeholder="貼上圖片連結或使用下方上傳" className="w-full p-3 bg-slate-50 rounded-xl text-xs text-slate-600 outline-none focus:ring-2 focus:ring-sky-400"/>
+                                        <input type="text" value={localSettings.backgroundImage} onChange={e => handleChange('backgroundImage', e.target.value)} placeholder="貼上圖片連結或使用下方上傳" className="w-full p-3 bg-slate-50 rounded-xl text-xs text-slate-600 outline-none focus:ring-2 focus:ring-sky-400"/>
                                         <div className="flex gap-2">
                                             <button onClick={() => fileInputRef.current?.click()} className="flex-1 py-2 bg-sky-100 text-sky-600 rounded-xl text-xs font-bold hover:bg-sky-200 flex items-center justify-center gap-1">
                                                 <ImagePlus size={14}/> 上傳圖片
                                             </button>
                                             <input type="file" ref={fileInputRef} accept="image/*" onChange={handleBgUpload} className="hidden" />
-                                            
-                                            {localBg && (
-                                                <button onClick={() => setLocalBg('')} className="px-4 py-2 bg-red-50 text-red-500 rounded-xl text-xs font-bold hover:bg-red-100">
-                                                    清除
-                                                </button>
-                                            )}
                                         </div>
                                     </div>
+
+                                    {/* Advanced Background Controls */}
+                                    {localSettings.backgroundImage && (
+                                        <div className="bg-slate-50 p-3 rounded-xl space-y-3">
+                                            {/* Position Y Slider */}
+                                            <div>
+                                                <div className="flex justify-between items-center mb-1">
+                                                    <label className="text-xs font-bold text-slate-500 flex items-center gap-1"><MoveVertical size={12}/> 垂直位置</label>
+                                                    <span className="text-xs font-bold text-sky-600">{localSettings.bgPosY}%</span>
+                                                </div>
+                                                <input 
+                                                    type="range" min="0" max="100" step="1" 
+                                                    value={localSettings.bgPosY} 
+                                                    onChange={(e) => handleChange('bgPosY', parseInt(e.target.value))}
+                                                    className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-sky-500"
+                                                />
+                                            </div>
+
+                                            {/* Size Selection */}
+                                            <div>
+                                                <div className="flex justify-between items-center mb-2">
+                                                    <label className="text-xs font-bold text-slate-500 flex items-center gap-1"><BoxSelect size={12}/> 縮放模式</label>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    {[
+                                                        { val: 'cover', label: '填滿' },
+                                                        { val: 'contain', label: '完整' },
+                                                        { val: 'auto', label: '原圖' }
+                                                    ].map(opt => (
+                                                        <button 
+                                                            key={opt.val}
+                                                            onClick={() => handleChange('bgSize', opt.val)}
+                                                            className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-colors ${localSettings.bgSize === opt.val ? 'bg-sky-100 text-sky-600 border-sky-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-100'}`}
+                                                        >
+                                                            {opt.label}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            {/* Preview Box */}
+                                            <div 
+                                                className="w-full h-24 rounded-xl bg-slate-200 border border-slate-300 overflow-hidden relative"
+                                                style={{
+                                                    backgroundImage: `url(${localSettings.backgroundImage})`,
+                                                    backgroundPosition: `center ${localSettings.bgPosY}%`,
+                                                    backgroundSize: localSettings.bgSize,
+                                                    backgroundRepeat: 'no-repeat'
+                                                }}
+                                            >
+                                                <div className="absolute inset-0 flex items-center justify-center font-bold text-white text-xs drop-shadow-md bg-black/10">效果預覽</div>
+                                            </div>
+                                        </div>
+                                    )}
 
                                     {/* Opacity Slider */}
                                     <div className="bg-slate-50 p-3 rounded-xl">
                                         <div className="flex justify-between items-center mb-2">
                                             <label className="text-xs font-bold text-slate-500 flex items-center gap-1"><Droplets size={12}/> 卡片透明度</label>
-                                            <span className="text-xs font-bold text-sky-600">{Math.round(localOpacity * 100)}%</span>
+                                            <span className="text-xs font-bold text-sky-600">{Math.round(localSettings.cardOpacity * 100)}%</span>
                                         </div>
                                         <input 
                                             type="range" 
                                             min="0.1" 
                                             max="1.0" 
                                             step="0.05" 
-                                            value={localOpacity} 
-                                            onChange={(e) => setLocalOpacity(parseFloat(e.target.value))}
+                                            value={localSettings.cardOpacity} 
+                                            onChange={(e) => handleChange('cardOpacity', parseFloat(e.target.value))}
                                             className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-sky-500"
                                         />
                                     </div>
-
-                                    {localBg && (
-                                        <div className="w-full h-24 rounded-xl bg-slate-50 border border-slate-100 overflow-hidden relative">
-                                            <img src={localBg} className="w-full h-full object-cover opacity-80" />
-                                            <div className="absolute inset-0 flex items-center justify-center font-bold text-white text-xs drop-shadow-md">預覽</div>
-                                        </div>
-                                    )}
                                 </div>
                             </div>
 
                             <div className="border-t border-slate-100 pt-4">
                                 <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 block">Telegram Bot Token</label>
-                                <input type="text" value={localToken} onChange={e => setLocalToken(e.target.value)} placeholder="123456:ABC-DEF..." className="w-full p-3 bg-slate-50 rounded-xl text-sm font-mono text-slate-600 outline-none focus:ring-2 focus:ring-sky-400"/>
+                                <input type="text" value={localSettings.tgToken} onChange={e => handleChange('tgToken', e.target.value)} placeholder="123456:ABC-DEF..." className="w-full p-3 bg-slate-50 rounded-xl text-sm font-mono text-slate-600 outline-none focus:ring-2 focus:ring-sky-400"/>
                             </div>
                             <div>
                                 <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 block">Telegram Chat ID</label>
-                                <input type="text" value={localChatId} onChange={e => setLocalChatId(e.target.value)} placeholder="-123456789" className="w-full p-3 bg-slate-50 rounded-xl text-sm font-mono text-slate-600 outline-none focus:ring-2 focus:ring-sky-400"/>
+                                <input type="text" value={localSettings.tgChatId} onChange={e => handleChange('tgChatId', e.target.value)} placeholder="-123456789" className="w-full p-3 bg-slate-50 rounded-xl text-sm font-mono text-slate-600 outline-none focus:ring-2 focus:ring-sky-400"/>
                             </div>
                             
-                            <button onClick={handleTest} disabled={!localToken || !localChatId || testStatus === 'sending'} 
+                            <button onClick={handleTest} disabled={!localSettings.tgToken || !localSettings.tgChatId || testStatus === 'sending'} 
                                 className={`w-full py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${testStatus === 'success' ? 'bg-emerald-100 text-emerald-600' : testStatus === 'error' ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
                                 {testStatus === 'sending' ? <Loader2 size={14} className="animate-spin"/> : testStatus === 'success' ? <Check size={14}/> : <SendHorizontal size={14}/>}
                                 {testStatus === 'sending' ? '傳送中...' : testStatus === 'success' ? '測試成功' : testStatus === 'error' ? '測試失敗' : '測試傳送'}
@@ -900,14 +992,20 @@
 
             // Settings
             const [settings, setSettings] = useState(() => JSON.parse(localStorage.getItem('wallet_settings_v3')) || { 
-                tgToken: '', tgChatId: '', notifyDays: 7, appTitle: '我的票夾', backgroundImage: '', cardOpacity: 0.95
+                tgToken: '', tgChatId: '', notifyDays: 7, appTitle: '我的票夾', 
+                backgroundImage: '', cardOpacity: 0.95,
+                bgPosY: 50, bgSize: 'cover' 
             });
+            // Background History State
+            const [bgHistory, setBgHistory] = useState(() => JSON.parse(localStorage.getItem('wallet_bg_history_v3')) || []);
+
             const [showSettings, setShowSettings] = useState(false);
             const [showTagManager, setShowTagManager] = useState(false);
             
             // Persist
             useEffect(() => localStorage.setItem('wallet_tasks_v3', JSON.stringify(tasks)), [tasks]);
             useEffect(() => localStorage.setItem('wallet_settings_v3', JSON.stringify(settings)), [settings]);
+            useEffect(() => localStorage.setItem('wallet_bg_history_v3', JSON.stringify(bgHistory)), [bgHistory]);
 
             // Notification Check
             useEffect(() => {
@@ -1016,7 +1114,9 @@
                         notifyDays: settings.notifyDays,
                         appTitle: settings.appTitle,
                         backgroundImage: settings.backgroundImage,
-                        cardOpacity: settings.cardOpacity
+                        cardOpacity: settings.cardOpacity,
+                        bgPosY: settings.bgPosY,
+                        bgSize: settings.bgSize
                     },
                     tasks: tasks
                 };
@@ -1087,6 +1187,24 @@
                 setIsSelectionMode(false);
             };
 
+            // Custom wrapper for saving settings to handle history
+            const handleSaveSettings = (newSettings) => {
+                setSettings(newSettings);
+                // If background image is set and different, add to history
+                if (newSettings.backgroundImage) {
+                    setBgHistory(prev => {
+                        const filtered = prev.filter(img => img !== newSettings.backgroundImage);
+                        return [newSettings.backgroundImage, ...filtered].slice(0, 6); // Keep last 6
+                    });
+                }
+            };
+            
+            const handleRemoveHistory = (url) => {
+                if(confirm("確定要移除此背景紀錄嗎？")) {
+                    setBgHistory(prev => prev.filter(item => item !== url));
+                }
+            };
+
             return (
                 <>
                     {/* 1. Fixed Background Layer */}
@@ -1095,8 +1213,8 @@
                             className="fixed inset-0 z-0 mx-auto max-w-md transition-all duration-500"
                             style={{
                                 backgroundImage: `url(${settings.backgroundImage})`,
-                                backgroundSize: 'cover',
-                                backgroundPosition: 'center',
+                                backgroundSize: settings.bgSize || 'cover',
+                                backgroundPosition: `center ${settings.bgPosY || 50}%`,
                                 backgroundRepeat: 'no-repeat',
                             }}
                         />
@@ -1182,13 +1300,10 @@
                         <RedeemModal ticket={selectedTicket} onClose={() => setSelectedTicket(null)} onToggleComplete={handleToggleComplete} onDelete={handleDelete} onRestore={handleRestore} onUpdate={handleUpdate} allTags={allTags} />
                         <SettingsModal 
                             isOpen={showSettings} onClose={() => setShowSettings(false)} 
-                            {...settings} 
-                            setTgToken={t => setSettings(s=>({...s, tgToken:t}))} 
-                            setTgChatId={t => setSettings(s=>({...s, tgChatId:t}))} 
-                            setNotifyDays={t => setSettings(s=>({...s, notifyDays:t}))} 
-                            setBackgroundImage={t => setSettings(s=>({...s, backgroundImage:t}))}
-                            setCardOpacity={t => setSettings(s=>({...s, cardOpacity:t}))}
-                            onSave={setSettings}
+                            settings={settings}
+                            bgHistory={bgHistory}
+                            onSave={handleSaveSettings}
+                            onRemoveHistory={handleRemoveHistory}
                         />
                         <TagManagerModal isOpen={showTagManager} onClose={() => setShowTagManager(false)} tags={allTags} onDeleteTag={handleDeleteTag} />
                         <BatchEditModal isOpen={showBatchModal} onClose={() => setShowBatchModal(false)} selectedCount={selectedIds.size} onAddTag={handleBatchAddTag} allTags={allTags} />
