@@ -74,7 +74,7 @@
         .ticket-rip-l {
             position: absolute; left: -6px; top: 50%; transform: translateY(-50%);
             width: 12px; height: 12px; border-radius: 50%;
-            background-color: #f8fafc; /* Match body bg */
+            background-color: #f8fafc; /* Match body bg - will be overridden via JS if bg image set */
             box-shadow: inset -1px 0 2px rgba(0,0,0,0.05);
             z-index: 10;
         }
@@ -84,6 +84,10 @@
             background-color: #f8fafc;
             box-shadow: inset 1px 0 2px rgba(0,0,0,0.05);
             z-index: 10;
+        }
+        /* Fullscreen Image Overlay Transition */
+        .fullscreen-overlay {
+            animation: fadeIn 0.3s ease-out;
         }
     </style>
 </head>
@@ -271,17 +275,27 @@
             );
         };
 
-        const SettingsModal = ({ isOpen, onClose, tgToken, setTgToken, tgChatId, setTgChatId, notifyDays, setNotifyDays, onSave }) => {
+        const SettingsModal = ({ isOpen, onClose, tgToken, setTgToken, tgChatId, setTgChatId, notifyDays, setNotifyDays, backgroundImage, setBackgroundImage, onSave }) => {
             if(!isOpen) return null;
             const [localToken, setLocalToken] = useState(tgToken);
             const [localChatId, setLocalChatId] = useState(tgChatId);
             const [localDays, setLocalDays] = useState(notifyDays);
+            const [localBg, setLocalBg] = useState(backgroundImage || '');
             const [testStatus, setTestStatus] = useState(null);
+            const fileInputRef = useRef(null);
 
             const handleSave = () => {
-                onSave({ tgToken: localToken, tgChatId: localChatId, notifyDays: localDays });
+                onSave({ tgToken: localToken, tgChatId: localChatId, notifyDays: localDays, backgroundImage: localBg });
                 onClose();
             };
+
+            const handleBgUpload = async (e) => {
+                const file = e.target.files[0];
+                if(file) {
+                    const base64 = await compressImage(file);
+                    setLocalBg(base64);
+                }
+            }
 
             const handleTest = async () => {
                 setTestStatus('sending');
@@ -297,13 +311,40 @@
 
             return (
                 <div className="fixed inset-0 bg-slate-900/40 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-fade-in" onClick={onClose}>
-                    <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl scale-100" onClick={e => e.stopPropagation()}>
+                    <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl scale-100 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                         <h2 className="text-xl font-bold mb-6 flex items-center gap-2 text-slate-800"><CloudCog size={24} className="text-sky-500"/> 系統設定</h2>
                         <div className="space-y-5">
                             <div>
                                 <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 block">通知天數 (紅框顯示)</label>
                                 <input type="number" value={localDays} onChange={e => setLocalDays(e.target.value)} className="w-full p-3 bg-slate-50 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-sky-400"/>
                             </div>
+                            
+                            {/* Background Settings */}
+                            <div className="border-t border-slate-100 pt-4">
+                                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">背景設定</label>
+                                <div className="space-y-3">
+                                    <input type="text" value={localBg} onChange={e => setLocalBg(e.target.value)} placeholder="貼上圖片連結或使用下方上傳" className="w-full p-3 bg-slate-50 rounded-xl text-xs text-slate-600 outline-none focus:ring-2 focus:ring-sky-400"/>
+                                    <div className="flex gap-2">
+                                        <button onClick={() => fileInputRef.current?.click()} className="flex-1 py-2 bg-sky-100 text-sky-600 rounded-xl text-xs font-bold hover:bg-sky-200 flex items-center justify-center gap-1">
+                                            <ImagePlus size={14}/> 上傳圖片
+                                        </button>
+                                        <input type="file" ref={fileInputRef} accept="image/*" onChange={handleBgUpload} className="hidden" />
+                                        
+                                        {localBg && (
+                                            <button onClick={() => setLocalBg('')} className="px-4 py-2 bg-red-50 text-red-500 rounded-xl text-xs font-bold hover:bg-red-100">
+                                                清除
+                                            </button>
+                                        )}
+                                    </div>
+                                    {localBg && (
+                                        <div className="w-full h-24 rounded-xl bg-slate-50 border border-slate-100 overflow-hidden relative">
+                                            <img src={localBg} className="w-full h-full object-cover opacity-80" />
+                                            <div className="absolute inset-0 flex items-center justify-center font-bold text-white text-xs drop-shadow-md">預覽</div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
                             <div className="border-t border-slate-100 pt-4">
                                 <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 block">Telegram Bot Token</label>
                                 <input type="text" value={localToken} onChange={e => setLocalToken(e.target.value)} placeholder="123456:ABC-DEF..." className="w-full p-3 bg-slate-50 rounded-xl text-sm font-mono text-slate-600 outline-none focus:ring-2 focus:ring-sky-400"/>
@@ -329,13 +370,13 @@
         };
 
         const Header = ({ appTitle, onTitleChange, onOpenMenu, onOpenSettings, sortType, setSortType, setSearchQuery, searchQuery, isSelectionMode, setIsSelectionMode, selectedCount, onSelectAll }) => (
-            <div className="bg-white/80 backdrop-blur-md px-5 pt-12 pb-3 shadow-sm sticky top-0 z-30 border-b border-slate-100 transition-all">
+            <div className="bg-white/80 backdrop-blur-md px-5 pt-12 pb-3 shadow-sm sticky top-0 z-30 border-b border-white/20 transition-all rounded-b-[24px]">
                 <div className="flex justify-between items-center mb-4">
                     <div className="flex items-center gap-2 group cursor-pointer" onClick={() => {
                         const newTitle = prompt("修改標題名稱:", appTitle);
                         if(newTitle) onTitleChange(newTitle);
                     }}>
-                        <h1 className="text-2xl font-black text-slate-800 tracking-tight">{appTitle}</h1>
+                        <h1 className="text-2xl font-black text-slate-800 tracking-tight drop-shadow-sm">{appTitle}</h1>
                         <Pencil size={14} className="text-slate-300 group-hover:text-sky-500 transition-colors"/>
                     </div>
                     <div className="flex gap-2">
@@ -353,10 +394,10 @@
                         >
                             {isSelectionMode ? `已選 ${selectedCount}` : '選取'}
                         </button>
-                        <button onClick={onOpenSettings} className="w-9 h-9 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-500 hover:text-sky-600 hover:bg-white transition-all">
+                        <button onClick={onOpenSettings} className="w-9 h-9 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-500 hover:text-sky-600 hover:bg-white transition-all shadow-sm">
                             <i className="fas fa-cog"></i>
                         </button>
-                        <button onClick={onOpenMenu} className="w-9 h-9 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-500 hover:text-sky-600 hover:bg-white transition-all">
+                        <button onClick={onOpenMenu} className="w-9 h-9 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-500 hover:text-sky-600 hover:bg-white transition-all shadow-sm">
                             <i className="fas fa-ellipsis-v"></i>
                         </button>
                     </div>
@@ -370,7 +411,7 @@
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
                             placeholder="搜尋名稱、標籤..." 
-                            className="w-full pl-10 pr-3 py-2.5 text-sm bg-slate-50 border border-transparent focus:bg-white focus:border-sky-200 rounded-2xl outline-none font-medium text-slate-700 transition-all placeholder:text-slate-400" 
+                            className="w-full pl-10 pr-3 py-2.5 text-sm bg-slate-50/80 border border-transparent focus:bg-white focus:border-sky-200 rounded-2xl outline-none font-medium text-slate-700 transition-all placeholder:text-slate-400" 
                         />
                     </div>
                     <button 
@@ -379,7 +420,7 @@
                             const nextIdx = (types.indexOf(sortType) + 1) % types.length;
                             setSortType(types[nextIdx]);
                         }}
-                        className="px-4 py-2.5 bg-slate-50 hover:bg-white border border-transparent hover:border-slate-200 rounded-2xl flex items-center gap-1.5 text-xs font-bold text-slate-600 transition-all"
+                        className="px-4 py-2.5 bg-slate-50/80 hover:bg-white border border-transparent hover:border-slate-200 rounded-2xl flex items-center gap-1.5 text-xs font-bold text-slate-600 transition-all"
                     >
                         <ArrowUpDown size={14} className="text-sky-500"/>
                         {sortType === 'expiring' ? '快到期' : sortType === 'newest' ? '最新' : '最舊'}
@@ -391,15 +432,15 @@
         const TagTabs = ({ activeTag, setActiveTag, tags, onManageTags }) => {
             const displayTags = ['all', ...tags.slice(0, 10)];
             return (
-                <div className="bg-white px-4 pt-3 pb-2 border-b border-slate-50 flex items-center gap-2 sticky top-[125px] z-20 overflow-hidden">
+                <div className="bg-white/30 backdrop-blur-sm px-4 pt-3 pb-2 border-b border-white/20 flex items-center gap-2 sticky top-[125px] z-20 overflow-hidden">
                     <div className="flex gap-3 overflow-x-auto no-scrollbar flex-1 pb-1">
                         {displayTags.map(tag => (
-                            <button key={tag} onClick={() => setActiveTag(tag)} className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${activeTag === tag ? 'bg-sky-500 text-white shadow-md shadow-sky-200' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'}`}>
+                            <button key={tag} onClick={() => setActiveTag(tag)} className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${activeTag === tag ? 'bg-sky-500 text-white shadow-md shadow-sky-200' : 'bg-slate-50/80 text-slate-500 hover:bg-white'}`}>
                                 {tag === 'all' ? '全部' : tag}
                             </button>
                         ))}
                     </div>
-                    <button onClick={onManageTags} className="p-2 text-slate-400 hover:text-sky-600 bg-white shadow-sm rounded-full border border-slate-50"><SlidersHorizontal size={16}/></button>
+                    <button onClick={onManageTags} className="p-2 text-slate-400 hover:text-sky-600 bg-white/80 shadow-sm rounded-full border border-slate-50"><SlidersHorizontal size={16}/></button>
                 </div>
             );
         };
@@ -407,7 +448,6 @@
         const TicketCard = ({ ticket, onClick, notifyDays, isSelectionMode, isSelected, onSelect, isDuplicate }) => {
             const isExpiring = !ticket.completed && ticket.expiry && checkIsExpiringSoon(ticket.expiry, notifyDays);
             
-            // 3. Duplicate Style: Red border for duplicates
             const duplicateStyle = isDuplicate && !ticket.completed && !ticket.isDeleted 
                 ? 'border-red-500 ring-2 ring-red-100 shadow-red-200' 
                 : '';
@@ -418,7 +458,7 @@
                         if(isSelectionMode) onSelect(ticket.id);
                         else onClick(ticket);
                     }}
-                    className={`bg-white mx-4 mt-4 p-4 rounded-3xl shadow-sm border flex gap-4 active:scale-[0.98] transition-all cursor-pointer relative overflow-hidden group 
+                    className={`bg-white/95 backdrop-blur-sm mx-4 mt-4 p-4 rounded-3xl shadow-sm border flex gap-4 active:scale-[0.98] transition-all cursor-pointer relative overflow-hidden group 
                     ${isSelected ? 'ring-2 ring-sky-500 border-sky-500 bg-sky-50' : isExpiring ? 'border-red-400 shadow-red-100 bg-red-50/10' : 'border-slate-100 hover:border-sky-200 hover:shadow-md'}
                     ${duplicateStyle}`}
                 >
@@ -428,7 +468,6 @@
                         </div>
                     )}
                     
-                    {/* Duplicate Indicator Label */}
                     {isDuplicate && !ticket.completed && !ticket.isDeleted && (
                         <div className="absolute top-0 left-0 bg-red-500 text-white text-[9px] px-2 py-0.5 rounded-br-lg z-20 font-bold">
                             重複序號
@@ -476,15 +515,22 @@
                             )}
 
                             {!isSelectionMode && (
-                                <button className={`text-xs font-bold px-3 py-1.5 rounded-full transition-colors ${ticket.completed ? 'bg-slate-100 text-slate-500' : 'bg-orange-50 text-orange-600 group-hover:bg-orange-500 group-hover:text-white'}`}>
+                                <button className={`text-sm font-bold px-5 py-2.5 rounded-2xl shadow-sm transition-all active:scale-95 ${ticket.completed ? 'bg-slate-100 text-slate-500' : 'bg-emerald-100 text-emerald-600 hover:bg-emerald-500 hover:text-white shadow-emerald-100'}`}>
                                     {ticket.completed ? '查看' : '兌換'}
                                 </button>
                             )}
                         </div>
                     </div>
                     
-                    <div className="ticket-rip-l"></div>
-                    <div className="ticket-rip-r"></div>
+                    {/* Rip Effect circles need background color update dynamically if possible, but keep simple for now */}
+                    <div className="ticket-rip-l" style={{backgroundColor: 'transparent', boxShadow: 'none', borderLeft: '6px solid transparent'}}></div> 
+                    {/* The original rip effect was dependent on exact bg match. With custom BG, it's tricky. 
+                        Let's simplify it or just hide it if it looks bad. For now, kept but might look odd on custom BG. 
+                        Actually, let's just make it white to match card if we can't match BG.
+                        Wait, the rip is ON the card, eating INTO it. The color should match the BACKGROUND BEHIND the card.
+                        Since BG is dynamic, we can't easily do CSS.
+                        Alternative: Removing rip effect to avoid visual glitches on custom background.
+                    */}
                 </div>
             );
         };
@@ -497,6 +543,9 @@
             const [editTags, setEditTags] = useState(ticket.tags || []);
             const [editImage, setEditImage] = useState(ticket.image || '');
             const [showOriginalImage, setShowOriginalImage] = useState(false);
+            
+            // Fullscreen state
+            const [showFullScreen, setShowFullScreen] = useState(false);
 
             const handleSave = () => {
                 onUpdate({
@@ -524,6 +573,7 @@
             const displayImage = showOriginalImage || forceShowImage;
 
             return (
+                <>
                 <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 animate-fade-in backdrop-blur-md" onClick={onClose}>
                     <div className="bg-white w-full max-w-md rounded-[32px] p-6 relative shadow-2xl overflow-y-auto max-h-[90vh] border border-white/20" onClick={e => e.stopPropagation()}>
                         
@@ -573,14 +623,19 @@
 
                                 {displayImage && hasImage ? (
                                      <div className="w-full flex flex-col items-center gap-4">
-                                         <div className="relative group w-full">
+                                         <div className="relative group w-full cursor-zoom-in" onClick={() => setShowFullScreen(true)}>
                                              <img src={ticket.image} className="w-full h-auto rounded-xl shadow-sm border border-white" />
-                                             <a href={ticket.image} download={`ticket_${ticket.productName}`} className="absolute bottom-3 right-3 bg-slate-900/60 text-white p-1.5 rounded-lg hover:bg-slate-900/80 backdrop-blur-sm"><Download size={14}/></a>
+                                             <div className="absolute bottom-3 right-3 bg-slate-900/60 text-white p-1.5 rounded-lg pointer-events-none"><Maximize2 size={14}/></div>
                                          </div>
-                                         {/* Added Barcode below original image */}
+                                         {/* Modification: Show BOTH Barcode and QR Code below image */}
                                          {ticket.serial && (
-                                            <div className="w-full bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
-                                                <BarcodeCanvas text={ticket.serial} />
+                                            <div className="w-full flex flex-col gap-3 animate-fade-in">
+                                                <div className="w-full bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
+                                                    <BarcodeCanvas text={ticket.serial} />
+                                                </div>
+                                                <div className="w-full bg-white p-3 rounded-xl border border-slate-100 shadow-sm flex justify-center">
+                                                    <QRCodeCanvas text={ticket.serial} size={150} />
+                                                </div>
                                             </div>
                                          )}
                                      </div>
@@ -592,8 +647,6 @@
                                         </div>
                                     </>
                                 )}
-
-                                {/* Removed the serial text block here as requested */}
                             </div>
                         )}
 
@@ -607,7 +660,18 @@
                                 <>
                                     {!ticket.isDeleted && (
                                         <button 
-                                            onClick={() => { onToggleComplete(ticket); onClose(); }} 
+                                            onClick={() => { 
+                                                // Added Confirmation Alert
+                                                if(ticket.completed) {
+                                                    onToggleComplete(ticket); 
+                                                    onClose();
+                                                } else {
+                                                    if(window.confirm("確定要立即核銷嗎？此動作無法復原 (除非手動還原)。")) {
+                                                        onToggleComplete(ticket); 
+                                                        onClose();
+                                                    }
+                                                }
+                                            }} 
                                             className={`w-full py-5 text-lg font-bold rounded-2xl shadow-lg flex items-center justify-center gap-2 text-white transition-transform active:scale-95 ${ticket.completed ? 'bg-emerald-500 shadow-emerald-200 hover:bg-emerald-600' : 'bg-emerald-500 shadow-emerald-200 hover:bg-emerald-600'}`}
                                         >
                                             {ticket.completed ? <><RotateCcw size={24}/> 標記為未用</> : <><CheckCircle2 size={24}/> 立即核銷</>}
@@ -636,6 +700,21 @@
                         </div>
                     </div>
                 </div>
+                
+                {/* Full Screen Image Overlay */}
+                {showFullScreen && ticket.image && (
+                    <div 
+                        className="fixed inset-0 z-[60] bg-black flex items-center justify-center p-2 fullscreen-overlay"
+                        onClick={() => setShowFullScreen(false)}
+                    >
+                        <img src={ticket.image} className="max-w-full max-h-full object-contain" />
+                        <button className="absolute top-4 right-4 w-10 h-10 bg-white/20 text-white rounded-full flex items-center justify-center backdrop-blur-md hover:bg-white/30 transition-colors">
+                            <X size={24}/>
+                        </button>
+                        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-white/70 text-sm font-bold bg-black/50 px-4 py-2 rounded-full">點擊任意處關閉</div>
+                    </div>
+                )}
+                </>
             );
         };
 
@@ -794,7 +873,7 @@
 
             // Settings
             const [settings, setSettings] = useState(() => JSON.parse(localStorage.getItem('wallet_settings_v3')) || { 
-                tgToken: '', tgChatId: '', notifyDays: 7, appTitle: '我的票夾' 
+                tgToken: '', tgChatId: '', notifyDays: 7, appTitle: '我的票夾', backgroundImage: ''
             });
             const [showSettings, setShowSettings] = useState(false);
             const [showTagManager, setShowTagManager] = useState(false);
@@ -908,7 +987,8 @@
                         tgToken: settings.tgToken, 
                         tgChatId: settings.tgChatId, 
                         notifyDays: settings.notifyDays,
-                        appTitle: settings.appTitle
+                        appTitle: settings.appTitle,
+                        backgroundImage: settings.backgroundImage
                     },
                     tasks: tasks
                 };
@@ -927,7 +1007,7 @@
                             
                             let confirmSettings = false;
                             if (!Array.isArray(data) && data.settings) {
-                                if (confirm("備份檔包含設定資料 (APP標題、Telegram Token 等)，是否一併還原？")) {
+                                if (confirm("備份檔包含設定資料 (APP標題、Telegram Token、背景圖 等)，是否一併還原？")) {
                                     setSettings(prev => ({...prev, ...data.settings}));
                                     confirmSettings = true;
                                 }
@@ -979,8 +1059,21 @@
                 setIsSelectionMode(false);
             };
 
+            const bgStyle = settings.backgroundImage ? {
+                backgroundImage: `url(${settings.backgroundImage})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                backgroundAttachment: 'fixed'
+            } : {};
+
             return (
-                <div className="max-w-md mx-auto bg-white min-h-screen relative pb-28 shadow-2xl sm:border-x border-slate-200">
+                <div 
+                    className="max-w-md mx-auto min-h-screen relative pb-28 shadow-2xl sm:border-x border-slate-200 transition-all duration-500"
+                    style={{
+                        backgroundColor: settings.backgroundImage ? 'transparent' : '#fff',
+                        ...bgStyle
+                    }}
+                >
                     <Header 
                         appTitle={settings.appTitle}
                         onTitleChange={(t) => setSettings(s => ({...s, appTitle: t}))}
@@ -998,7 +1091,7 @@
                     
                     <TagTabs activeTag={activeTag} setActiveTag={setActiveTag} tags={allTags} onManageTags={() => setShowTagManager(true)}/>
                     
-                    <div className="pb-8 min-h-[50vh] bg-slate-50 pt-2">
+                    <div className={`pb-8 min-h-[50vh] pt-2 transition-colors ${settings.backgroundImage ? 'bg-slate-50/50' : 'bg-slate-50'}`}>
                         {filteredTasks.length > 0 ? (
                             filteredTasks.map(ticket => (
                                 <TicketCard 
@@ -1053,7 +1146,12 @@
                     <RedeemModal ticket={selectedTicket} onClose={() => setSelectedTicket(null)} onToggleComplete={handleToggleComplete} onDelete={handleDelete} onRestore={handleRestore} onUpdate={handleUpdate} allTags={allTags} />
                     <SettingsModal 
                         isOpen={showSettings} onClose={() => setShowSettings(false)} 
-                        {...settings} setTgToken={t => setSettings(s=>({...s, tgToken:t}))} setTgChatId={t => setSettings(s=>({...s, tgChatId:t}))} setNotifyDays={t => setSettings(s=>({...s, notifyDays:t}))} onSave={setSettings}
+                        {...settings} 
+                        setTgToken={t => setSettings(s=>({...s, tgToken:t}))} 
+                        setTgChatId={t => setSettings(s=>({...s, tgChatId:t}))} 
+                        setNotifyDays={t => setSettings(s=>({...s, notifyDays:t}))} 
+                        setBackgroundImage={t => setSettings(s=>({...s, backgroundImage:t}))}
+                        onSave={setSettings}
                     />
                     <TagManagerModal isOpen={showTagManager} onClose={() => setShowTagManager(false)} tags={allTags} onDeleteTag={handleDeleteTag} />
                     <BatchEditModal isOpen={showBatchModal} onClose={() => setShowBatchModal(false)} selectedCount={selectedIds.size} onAddTag={handleBatchAddTag} allTags={allTags} />
@@ -1066,5 +1164,3 @@
     </script>
 </body>
 </html>
-
-
