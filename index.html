@@ -322,7 +322,7 @@
             compactShowImage: false
         };
 
-        // [CR-IMPL] SettingsModal
+        // [CR-IMPL] SettingsModal: Added onAddToHistory prop
         const SettingsModal = ({ isOpen, onClose, settings, bgHistory, onSave, onRemoveHistory, onAddToHistory }) => {
             if(!isOpen) return null;
             
@@ -330,9 +330,10 @@
             // Current tab in settings modal: 'active' | 'completed' | 'deleted'
             const [currentTab, setCurrentTab] = useState('active');
             const [testStatus, setTestStatus] = useState(null);
-            
-            // [CR-IMPL] Removed fileInputRef (Manual upload removed)
+            // Removed fileInputRef as manual upload section is removed
+            // const fileInputRef = useRef(null); 
             const headerFileInputRef = useRef(null);
+            // [CR-IMPL] Ref for direct gallery upload
             const galleryInputRef = useRef(null);
 
             // Get current view config, safe fallback
@@ -360,12 +361,13 @@
                 onClose();
             };
 
-            // [CR-IMPL] Removed handleBgUpload (Manual upload logic removed)
+            // Removed handleBgUpload as manual upload section is removed
 
             const handleHeaderBgUpload = async (e) => {
                 const file = e.target.files[0];
                 if(file) {
-                    // [CR-IMPL] Removed 5MB check
+                    // [CR-IMPL] Update: Removed 5MB file size limit check
+                    // if(file.size > 5 * 1024 * 1024) { ... }
                     try {
                         const base64 = await compressImage(file);
                         handleViewConfigChange('headerBackgroundImage', base64);
@@ -377,7 +379,8 @@
             const handleGalleryUpload = async (e) => {
                 const file = e.target.files[0];
                 if(file) {
-                    // [CR-IMPL] Removed 5MB check
+                    // [CR-IMPL] Update: Removed 5MB file size limit check
+                    // if(file.size > 5 * 1024 * 1024) { ... }
                     try {
                         const base64 = await compressImage(file);
                         if(onAddToHistory) onAddToHistory(base64); // Call parent handler immediately
@@ -497,50 +500,8 @@
                                         </div>
                                     </div>
 
-                                    {/* [CR-IMPL] Removed Manual Upload section here */}
-
-                                    {/* Advanced Background Controls */}
-                                    {currentViewConfig.backgroundImage && (
-                                        <div className="bg-slate-50 p-3 rounded-xl space-y-3">
-                                            {/* Position Y Slider */}
-                                            <div>
-                                                <div className="flex justify-between items-center mb-1">
-                                                    <label className="text-xs font-bold text-slate-500 flex items-center gap-1"><MoveVertical size={12}/> 垂直位置</label>
-                                                    <span className="text-xs font-bold text-sky-600">{currentViewConfig.bgPosY}%</span>
-                                                </div>
-                                                <input 
-                                                    type="range" min="0" max="100" step="1" 
-                                                    value={currentViewConfig.bgPosY} 
-                                                    onChange={(e) => handleViewConfigChange('bgPosY', parseInt(e.target.value))}
-                                                    className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-sky-500"
-                                                />
-                                            </div>
-
-                                            {/* Size Selection */}
-                                            <div>
-                                                <div className="flex justify-between items-center mb-2">
-                                                    <label className="text-xs font-bold text-slate-500 flex items-center gap-1"><BoxSelect size={12}/> 縮放模式</label>
-                                                </div>
-                                                <div className="flex gap-2">
-                                                    {[
-                                                        { val: 'cover', label: '填滿' },
-                                                        { val: 'contain', label: '完整' },
-                                                        { val: 'auto', label: '原圖' }
-                                                    ].map(opt => (
-                                                        <button 
-                                                            key={opt.val}
-                                                            onClick={() => handleViewConfigChange('bgSize', opt.val)}
-                                                            className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-colors ${currentViewConfig.bgSize === opt.val ? 'bg-sky-100 text-sky-600 border-sky-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-100'}`}
-                                                        >
-                                                            {opt.label}
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            </div>
-
-                                            {/* [CR-IMPL] Removed Preview Box here */}
-                                        </div>
-                                    )}
+                                    {/* [CR-IMPL] Removed Manual Upload & Preview Box */}
+                                    {/* [CR-IMPL] Removed Background Position & Size Controls */}
 
                                     {/* Opacity & Color */}
                                     <div className="bg-slate-50 p-3 rounded-xl space-y-3">
@@ -1374,7 +1335,7 @@
             const [showTagManager, setShowTagManager] = useState(false);
             
             // Persist
-            // CR-FIX: Add try-catch for localStorage quota check
+            // [CR-IMPL] Fix: Wrap localStorage.setItem in try-catch to prevent crash on quota exceeded
             useEffect(() => {
                 try {
                     localStorage.setItem('wallet_tasks_v3', JSON.stringify(tasks));
@@ -1387,15 +1348,30 @@
                 }
             }, [tasks]);
 
+            // [CR-IMPL] Fix: Wrap localStorage.setItem in try-catch to prevent crash on quota exceeded
             useEffect(() => {
                  try {
                     localStorage.setItem('wallet_settings_v3', JSON.stringify(settings));
                  } catch (e) {
-                    console.error("Settings Save Error:", e);
+                    if (e.name === 'QuotaExceededError' || e.code === 22) {
+                        console.error("Settings Storage Full");
+                    } else {
+                        console.error("Settings Save Error:", e);
+                    }
                  }
             }, [settings]);
 
-            useEffect(() => localStorage.setItem('wallet_bg_history_v3', JSON.stringify(bgHistory)), [bgHistory]);
+            // [CR-IMPL] Fix: Wrap localStorage.setItem in try-catch to prevent crash on quota exceeded
+            useEffect(() => {
+                try {
+                    localStorage.setItem('wallet_bg_history_v3', JSON.stringify(bgHistory));
+                } catch (e) {
+                    if (e.name === 'QuotaExceededError' || e.code === 22) {
+                        console.error("History Storage Full");
+                        // We do not alert here to avoid spamming the user, but this prevents the crash
+                    }
+                }
+            }, [bgHistory]);
 
             // Notification Check
             useEffect(() => {
