@@ -322,7 +322,8 @@
             compactShowImage: false
         };
 
-        const SettingsModal = ({ isOpen, onClose, settings, bgHistory, onSave, onRemoveHistory }) => {
+        // [CR-IMPL] SettingsModal: Added onAddToHistory prop
+        const SettingsModal = ({ isOpen, onClose, settings, bgHistory, onSave, onRemoveHistory, onAddToHistory }) => {
             if(!isOpen) return null;
             
             const [localSettings, setLocalSettings] = useState(JSON.parse(JSON.stringify(settings)));
@@ -331,6 +332,8 @@
             const [testStatus, setTestStatus] = useState(null);
             const fileInputRef = useRef(null);
             const headerFileInputRef = useRef(null);
+            // [CR-IMPL] Ref for direct gallery upload
+            const galleryInputRef = useRef(null);
 
             // Get current view config, safe fallback
             const currentViewConfig = localSettings.viewConfigs?.[currentTab] || { ...defaultViewConfig };
@@ -378,6 +381,18 @@
                     } catch(err) { alert("處理圖片時發生錯誤：" + err.message); }
                 }
             }
+
+            // [CR-IMPL] Handle direct gallery upload
+            const handleGalleryUpload = async (e) => {
+                const file = e.target.files[0];
+                if(file) {
+                    if(file.size > 5 * 1024 * 1024) { alert("圖片過大 (超過 5MB)，請使用較小的圖片以免造成當機。"); return; }
+                    try {
+                        const base64 = await compressImage(file);
+                        if(onAddToHistory) onAddToHistory(base64); // Call parent handler immediately
+                    } catch(err) { alert("處理圖片時發生錯誤：" + err.message); }
+                }
+            };
 
             const handleTest = async () => {
                 setTestStatus('sending');
@@ -442,38 +457,52 @@
                                         </div>
                                     </div>
 
-                                    {/* CR-MOD: History / Library Management - Modified for simple library management */}
+                                    {/* History / Recent Backgrounds */}
                                     <div>
                                         <div className="text-xs font-bold text-slate-500 mb-2 flex justify-between">
-                                            <span>背景圖庫管理 (點擊 X 移除)</span>
+                                            <span>曾經使用的背景 (主畫面)</span>
                                             {bgHistory.length === 0 && <span className="text-slate-300 font-normal">尚無紀錄</span>}
                                         </div>
                                         <div className="grid grid-cols-4 gap-2 mb-2">
+                                            {/* [CR-IMPL] New Upload to Gallery Card */}
+                                            <div 
+                                                onClick={() => galleryInputRef.current?.click()}
+                                                className="w-full h-12 rounded-lg bg-sky-50 border border-dashed border-sky-200 text-sky-500 hover:bg-sky-100 hover:border-sky-300 flex items-center justify-center cursor-pointer transition-colors"
+                                                title="上傳圖片到此列表"
+                                            >
+                                                <Plus size={16} strokeWidth={3} />
+                                                <input type="file" ref={galleryInputRef} accept="image/*" onChange={handleGalleryUpload} className="hidden" />
+                                            </div>
+
                                             {bgHistory.map((bgUrl, idx) => (
                                                 <div key={idx} className="relative group">
-                                                    {/* CR-MOD: Removed onClick handler. Now purely for display/management */}
-                                                    <div 
-                                                        className="w-full h-12 rounded-lg bg-cover bg-center border border-slate-200 shadow-sm"
+                                                    <button 
+                                                        onClick={() => handleViewConfigChange('backgroundImage', bgUrl)}
+                                                        className="w-full h-12 rounded-lg bg-cover bg-center border border-slate-200 hover:scale-105 transition-transform shadow-sm"
                                                         style={{ backgroundImage: `url(${bgUrl})` }}
                                                     >
-                                                        {/* Optional: Highlight if currently active in this view, just for info */}
                                                         {currentViewConfig.backgroundImage === bgUrl && (
                                                             <div className="absolute inset-0 bg-black/40 flex items-center justify-center rounded-lg">
                                                                 <Check size={16} className="text-white"/>
                                                             </div>
                                                         )}
-                                                    </div>
+                                                    </button>
                                                     <button 
                                                         onClick={(e) => { e.stopPropagation(); onRemoveHistory(bgUrl); }}
-                                                        /* CR-MOD: Always allow removal, kept original styling logic but ensured it's accessible */
-                                                        className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center shadow-sm z-10"
-                                                        title="從圖庫移除"
+                                                        className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                                                        title="移除此紀錄"
                                                     >
                                                         <X size={10}/>
                                                     </button>
                                                 </div>
                                             ))}
-                                            {/* CR-MOD: Removed 'None' button from here as switching is handled by main page */}
+                                            <button 
+                                                onClick={() => handleViewConfigChange('backgroundImage', '')}
+                                                className="w-full h-12 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-200 text-xs font-bold"
+                                                title="使用純白背景"
+                                            >
+                                                無
+                                            </button>
                                         </div>
                                     </div>
 
@@ -482,11 +511,10 @@
                                         <input type="text" value={currentViewConfig.backgroundImage} onChange={e => handleViewConfigChange('backgroundImage', e.target.value)} placeholder="貼上圖片連結或使用下方上傳" className="w-full p-3 bg-slate-50 rounded-xl text-xs text-slate-600 outline-none focus:ring-2 focus:ring-sky-400"/>
                                         <div className="flex gap-2">
                                             <button onClick={() => fileInputRef.current?.click()} className="flex-1 py-2 bg-sky-100 text-sky-600 rounded-xl text-xs font-bold hover:bg-sky-200 flex items-center justify-center gap-1">
-                                                <ImagePlus size={14}/> 上傳並預覽
+                                                <ImagePlus size={14}/> 上傳圖片
                                             </button>
                                             <input type="file" ref={fileInputRef} accept="image/*" onChange={handleBgUpload} className="hidden" />
                                         </div>
-                                        <div className="text-[10px] text-slate-400 text-center">上傳後請點擊「儲存設定」以加入圖庫</div>
                                     </div>
 
                                     {/* Advanced Background Controls */}
@@ -1611,6 +1639,16 @@
                 }
             };
 
+            // [CR-IMPL] Direct add to history handler
+            const handleAddToHistory = (newBg) => {
+                if (!newBg) return;
+                setBgHistory(prev => {
+                    const filtered = prev.filter(bg => bg !== newBg); // Remove duplicate if exists
+                    const updated = [newBg, ...filtered];
+                    return updated.slice(0, 20); // Keep max 20
+                });
+            };
+
             // New: Quick Switch BG Logic
             const handleQuickBgChange = () => {
                 const history = [''].concat(bgHistory); // '' represents no bg
@@ -1623,10 +1661,12 @@
                 const nextIndex = (currentIndex + 1) % history.length;
                 const nextBg = history[nextIndex];
 
+                // [CR-IMPL] Unified Writing Logic: Update global settings state
                 setSettings(prev => ({
                     ...prev,
                     viewConfigs: {
                         ...prev.viewConfigs,
+                        // [CR-IMPL] Independent Tab Setting: Apply change only to current view
                         [view]: {
                             ...prev.viewConfigs[view],
                             backgroundImage: nextBg
@@ -1750,6 +1790,8 @@
                             bgHistory={bgHistory}
                             onSave={handleSaveSettings}
                             onRemoveHistory={handleRemoveHistory}
+                            // [CR-IMPL] Pass handler
+                            onAddToHistory={handleAddToHistory}
                         />
                         <TagManagerModal isOpen={showTagManager} onClose={() => setShowTagManager(false)} tags={allTags} onDeleteTag={handleDeleteTag} />
                         <BatchEditModal isOpen={showBatchModal} onClose={() => setShowBatchModal(false)} selectedCount={selectedIds.size} onAddTag={handleBatchAddTag} allTags={allTags} />
@@ -1763,4 +1805,5 @@
     </script>
 </body>
 </html>
+
 
