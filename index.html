@@ -322,7 +322,7 @@
             compactShowImage: false
         };
 
-        // [CR-IMPL] SettingsModal: Added onAddToHistory prop
+        // [CR-IMPL] SettingsModal
         const SettingsModal = ({ isOpen, onClose, settings, bgHistory, onSave, onRemoveHistory, onAddToHistory }) => {
             if(!isOpen) return null;
             
@@ -330,9 +330,9 @@
             // Current tab in settings modal: 'active' | 'completed' | 'deleted'
             const [currentTab, setCurrentTab] = useState('active');
             const [testStatus, setTestStatus] = useState(null);
-            const fileInputRef = useRef(null);
+            
+            // [CR-IMPL] Removed fileInputRef (Manual upload removed)
             const headerFileInputRef = useRef(null);
-            // [CR-IMPL] Ref for direct gallery upload
             const galleryInputRef = useRef(null);
 
             // Get current view config, safe fallback
@@ -360,21 +360,12 @@
                 onClose();
             };
 
-            const handleBgUpload = async (e) => {
-                const file = e.target.files[0];
-                if(file) {
-                    if(file.size > 5 * 1024 * 1024) { alert("圖片過大 (超過 5MB)，請使用較小的圖片以免造成當機。"); return; }
-                    try {
-                        const base64 = await compressImage(file);
-                        handleViewConfigChange('backgroundImage', base64);
-                    } catch(err) { alert("處理圖片時發生錯誤：" + err.message); }
-                }
-            }
+            // [CR-IMPL] Removed handleBgUpload (Manual upload logic removed)
 
             const handleHeaderBgUpload = async (e) => {
                 const file = e.target.files[0];
                 if(file) {
-                    if(file.size > 5 * 1024 * 1024) { alert("圖片過大 (超過 5MB)，請使用較小的圖片以免造成當機。"); return; }
+                    // [CR-IMPL] Removed 5MB check
                     try {
                         const base64 = await compressImage(file);
                         handleViewConfigChange('headerBackgroundImage', base64);
@@ -386,7 +377,7 @@
             const handleGalleryUpload = async (e) => {
                 const file = e.target.files[0];
                 if(file) {
-                    if(file.size > 5 * 1024 * 1024) { alert("圖片過大 (超過 5MB)，請使用較小的圖片以免造成當機。"); return; }
+                    // [CR-IMPL] Removed 5MB check
                     try {
                         const base64 = await compressImage(file);
                         if(onAddToHistory) onAddToHistory(base64); // Call parent handler immediately
@@ -506,16 +497,7 @@
                                         </div>
                                     </div>
 
-                                    {/* Manual Upload */}
-                                    <div className="space-y-2">
-                                        <input type="text" value={currentViewConfig.backgroundImage} onChange={e => handleViewConfigChange('backgroundImage', e.target.value)} placeholder="貼上圖片連結或使用下方上傳" className="w-full p-3 bg-slate-50 rounded-xl text-xs text-slate-600 outline-none focus:ring-2 focus:ring-sky-400"/>
-                                        <div className="flex gap-2">
-                                            <button onClick={() => fileInputRef.current?.click()} className="flex-1 py-2 bg-sky-100 text-sky-600 rounded-xl text-xs font-bold hover:bg-sky-200 flex items-center justify-center gap-1">
-                                                <ImagePlus size={14}/> 上傳圖片
-                                            </button>
-                                            <input type="file" ref={fileInputRef} accept="image/*" onChange={handleBgUpload} className="hidden" />
-                                        </div>
-                                    </div>
+                                    {/* [CR-IMPL] Removed Manual Upload section here */}
 
                                     {/* Advanced Background Controls */}
                                     {currentViewConfig.backgroundImage && (
@@ -556,18 +538,7 @@
                                                 </div>
                                             </div>
 
-                                            {/* Preview Box */}
-                                            <div 
-                                                className="w-full h-24 rounded-xl bg-slate-200 border border-slate-300 overflow-hidden relative"
-                                                style={{
-                                                    backgroundImage: `url(${currentViewConfig.backgroundImage})`,
-                                                    backgroundPosition: `center ${currentViewConfig.bgPosY}%`,
-                                                    backgroundSize: currentViewConfig.bgSize,
-                                                    backgroundRepeat: 'no-repeat'
-                                                }}
-                                            >
-                                                <div className="absolute inset-0 flex items-center justify-center font-bold text-white text-xs drop-shadow-md bg-black/10">效果預覽</div>
-                                            </div>
+                                            {/* [CR-IMPL] Removed Preview Box here */}
                                         </div>
                                     )}
 
