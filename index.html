@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>離線票券管家 Fresh (Wallet UI)</title>
+    <title>票券管家 Fresh (Wallet UI)</title>
 
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -108,7 +108,7 @@
             ImagePlus, Heart, HeartHandshake, Eye, EyeOff, Globe, BookOpen, Star, History, MousePointerClick, Layers,
             CalendarX2, CopyPlus, Lightbulb, Loader2, QrCode, SlidersHorizontal, ArrowUpDown, Image, CheckCheck, SendHorizontal, XCircle, Droplets,
             MoveVertical, BoxSelect, Monitor, Palette, Rows, LayoutGrid, ChevronRight, ChevronDown as ChevronDownIcon,
-            PanelTop // Added PanelTop to imports
+            PanelTop
         } from 'lucide-react';
 
         // --- 1. Core Logic (Helpers) ---
@@ -158,10 +158,16 @@
                 const img = new window.Image();
                 img.crossOrigin = "Anonymous";
                 
-                // CR-FIX: Use URL.createObjectURL instead of FileReader for better memory management
                 let objectUrl = null;
 
                 img.onload = () => {
+                    // Safety check for huge images (e.g. > 16MP) which might crash canvas
+                    if (img.width * img.height > 16000000) {
+                        if (objectUrl) URL.revokeObjectURL(objectUrl);
+                        reject(new Error("Image resolution too high"));
+                        return;
+                    }
+
                     const canvas = document.createElement('canvas');
                     let width = img.width; let height = img.height;
                     const MAX = 800;
@@ -171,7 +177,6 @@
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0, width, height);
                     
-                    // Cleanup memory
                     if (objectUrl) URL.revokeObjectURL(objectUrl);
                     
                     resolve(canvas.toDataURL('image/webp', 0.8));
@@ -354,22 +359,24 @@
             const handleBgUpload = async (e) => {
                 const file = e.target.files[0];
                 if(file) {
-                    if(file.size > 10 * 1024 * 1024) { alert("圖片過大 (超過 10MB)，建議使用較小的圖片。"); return; }
+                    // CR-FIX: Reduced limit to 5MB
+                    if(file.size > 5 * 1024 * 1024) { alert("圖片過大 (超過 5MB)，請使用較小的圖片以免造成當機。"); return; }
                     try {
                         const base64 = await compressImage(file);
                         handleViewConfigChange('backgroundImage', base64);
-                    } catch(err) { alert("處理圖片時發生錯誤"); }
+                    } catch(err) { alert("處理圖片時發生錯誤：" + err.message); }
                 }
             }
 
             const handleHeaderBgUpload = async (e) => {
                 const file = e.target.files[0];
                 if(file) {
-                    if(file.size > 10 * 1024 * 1024) { alert("圖片過大 (超過 10MB)，建議使用較小的圖片。"); return; }
+                    // CR-FIX: Reduced limit to 5MB
+                    if(file.size > 5 * 1024 * 1024) { alert("圖片過大 (超過 5MB)，請使用較小的圖片以免造成當機。"); return; }
                     try {
                         const base64 = await compressImage(file);
                         handleViewConfigChange('headerBackgroundImage', base64);
-                    } catch(err) { alert("處理圖片時發生錯誤"); }
+                    } catch(err) { alert("處理圖片時發生錯誤：" + err.message); }
                 }
             }
 
@@ -829,7 +836,7 @@
                             </div>
                             <div className="flex items-center gap-2 mt-0.5">
                                 {isExpiring && !ticket.completed && !ticket.isDeleted && <span className="text-[9px] font-bold text-red-500 flex items-center gap-0.5"><AlertCircle size={9}/> 快到期</span>}
-                                <span className={`text-[10px] font-bold ${ticket.completed ? 'text-emerald-600' : 'text-slate-400'}`}>
+                                <span className={`text-[10px] font-bold ${ticket.completed ? 'text-emerald-600' : 'text-emerald-500'}`}>
                                     {ticket.completed ? `已用 ${formatTime(ticket.completedAt)}` : (ticket.expiry || '無期限')}
                                 </span>
                             </div>
@@ -948,16 +955,16 @@
             const handleImageChange = async (e) => {
                 const file = e.target.files[0];
                 if(file) {
-                    // CR-FIX: Add size check
-                    if(file.size > 10 * 1024 * 1024) {
-                         alert("圖片過大 (超過 10MB)，建議使用較小的圖片以免造成當機。");
+                    // CR-FIX: Reduced limit to 5MB
+                    if(file.size > 5 * 1024 * 1024) {
+                         alert("圖片過大 (超過 5MB)，請使用較小的圖片以免造成當機。");
                          return;
                     }
                     try {
                         const base64 = await compressImage(file);
                         setEditImage(base64);
                     } catch(err) {
-                        alert("處理圖片時發生錯誤");
+                        alert("處理圖片時發生錯誤：" + err.message);
                         console.error(err);
                     }
                 }
@@ -1152,16 +1159,16 @@
             const handleImageUpload = async (e) => {
                 const file = e.target.files[0];
                 if(file) {
-                    // CR-FIX: Add size check
-                    if(file.size > 10 * 1024 * 1024) {
-                        alert("圖片過大 (超過 10MB)，建議使用較小的圖片以免造成當機。");
+                    // CR-FIX: Reduced limit to 5MB
+                    if(file.size > 5 * 1024 * 1024) {
+                        alert("圖片過大 (超過 5MB)，請使用較小的圖片以免造成當機。");
                         return;
                     }
                     try {
                         const base64 = await compressImage(file);
                         setImages([base64]);
                     } catch(err) {
-                        alert("處理圖片時發生錯誤");
+                        alert("處理圖片時發生錯誤：" + err.message);
                         console.error(err);
                     }
                 }
