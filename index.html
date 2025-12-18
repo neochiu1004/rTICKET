@@ -1634,8 +1634,9 @@
                             style={{
                                 top: '190px', // Approximate header height to prevent covering
                                 backgroundImage: `url(${currentConfig.backgroundImage})`,
-                                backgroundSize: currentConfig.bgSize || 'cover',
-                                backgroundPosition: `center ${currentConfig.bgPosY || 50}%`,
+                                // [CR-IMPL] Unified to 'Original' setting (auto size, top-center)
+                                backgroundSize: 'auto', 
+                                backgroundPosition: 'center top',
                                 backgroundRepeat: 'no-repeat',
                             }}
                         />
