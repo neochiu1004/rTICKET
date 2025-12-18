@@ -107,7 +107,8 @@
             Bell, BellRing, Send, UserCheck, CloudCog, Maximize2, Wand2, WifiOff, FileUp, Replace, FilePlus2, RefreshCw,
             ImagePlus, Heart, HeartHandshake, Eye, EyeOff, Globe, BookOpen, Star, History, MousePointerClick, Layers,
             CalendarX2, CopyPlus, Lightbulb, Loader2, QrCode, SlidersHorizontal, ArrowUpDown, Image, CheckCheck, SendHorizontal, XCircle, Droplets,
-            MoveVertical, BoxSelect, Monitor, Palette, Rows, LayoutGrid, ChevronRight, ChevronDown as ChevronDownIcon
+            MoveVertical, BoxSelect, Monitor, Palette, Rows, LayoutGrid, ChevronRight, ChevronDown as ChevronDownIcon,
+            PanelTop // Added PanelTop to imports
         } from 'lucide-react';
 
         // --- 1. Core Logic (Helpers) ---
@@ -306,6 +307,7 @@
 
         const defaultViewConfig = {
             backgroundImage: '', 
+            headerBackgroundImage: '', // New: Header BG
             cardOpacity: 0.95, 
             bgPosY: 50, 
             bgSize: 'cover',
@@ -322,6 +324,7 @@
             const [currentTab, setCurrentTab] = useState('active');
             const [testStatus, setTestStatus] = useState(null);
             const fileInputRef = useRef(null);
+            const headerFileInputRef = useRef(null);
 
             // Get current view config, safe fallback
             const currentViewConfig = localSettings.viewConfigs?.[currentTab] || { ...defaultViewConfig };
@@ -351,18 +354,22 @@
             const handleBgUpload = async (e) => {
                 const file = e.target.files[0];
                 if(file) {
-                    // CR-FIX: Add size check
-                    if(file.size > 10 * 1024 * 1024) {
-                        alert("圖片過大 (超過 10MB)，建議使用較小的圖片以免造成當機。");
-                        return;
-                    }
+                    if(file.size > 10 * 1024 * 1024) { alert("圖片過大 (超過 10MB)，建議使用較小的圖片。"); return; }
                     try {
                         const base64 = await compressImage(file);
                         handleViewConfigChange('backgroundImage', base64);
-                    } catch(err) {
-                        alert("處理圖片時發生錯誤");
-                        console.error(err);
-                    }
+                    } catch(err) { alert("處理圖片時發生錯誤"); }
+                }
+            }
+
+            const handleHeaderBgUpload = async (e) => {
+                const file = e.target.files[0];
+                if(file) {
+                    if(file.size > 10 * 1024 * 1024) { alert("圖片過大 (超過 10MB)，建議使用較小的圖片。"); return; }
+                    try {
+                        const base64 = await compressImage(file);
+                        handleViewConfigChange('headerBackgroundImage', base64);
+                    } catch(err) { alert("處理圖片時發生錯誤"); }
                 }
             }
 
@@ -411,10 +418,28 @@
                                 </div>
 
                                 <div className="space-y-4 animate-fade-in">
+                                    
+                                    {/* Header Background Settings */}
+                                    <div className="bg-slate-50 p-3 rounded-xl space-y-2">
+                                        <div className="flex justify-between items-center">
+                                            <label className="text-xs font-bold text-slate-500 flex items-center gap-1"><PanelTop size={12}/> 頂部功能區背景</label>
+                                            {currentViewConfig.headerBackgroundImage && (
+                                                <button onClick={() => handleViewConfigChange('headerBackgroundImage', '')} className="text-[10px] text-red-500 font-bold hover:underline">移除</button>
+                                            )}
+                                        </div>
+                                        <div className="flex gap-2 items-center">
+                                            <div className="w-10 h-10 rounded-lg bg-slate-200 bg-cover bg-center border border-slate-300 flex-shrink-0" style={{backgroundImage: currentViewConfig.headerBackgroundImage ? `url(${currentViewConfig.headerBackgroundImage})` : 'none'}}></div>
+                                            <button onClick={() => headerFileInputRef.current?.click()} className="flex-1 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-50">
+                                                更換圖片
+                                            </button>
+                                            <input type="file" ref={headerFileInputRef} accept="image/*" onChange={handleHeaderBgUpload} className="hidden" />
+                                        </div>
+                                    </div>
+
                                     {/* History / Recent Backgrounds */}
                                     <div>
                                         <div className="text-xs font-bold text-slate-500 mb-2 flex justify-between">
-                                            <span>曾經使用的背景</span>
+                                            <span>曾經使用的背景 (主畫面)</span>
                                             {bgHistory.length === 0 && <span className="text-slate-300 font-normal">尚無紀錄</span>}
                                         </div>
                                         <div className="grid grid-cols-4 gap-2 mb-2">
@@ -612,20 +637,38 @@
             isSelectionMode, setIsSelectionMode, selectedCount, onSelectAll, 
             isCompact, setIsCompact, hasBg, 
             // New Props
-            view, setView, activeTag, setActiveTag, allTags
+            view, setView, activeTag, setActiveTag, allTags,
+            onQuickBgChange, headerBackgroundImage // New Props
         }) => (
-            // Changed: bg-white to be opaque, increased z-index
-            <div className="px-5 pt-12 pb-4 shadow-sm sticky top-0 z-40 transition-all rounded-b-[24px] bg-white text-slate-800">
+            // Changed: Apply headerBackgroundImage if present
+            <div 
+                className="px-5 pt-12 pb-4 shadow-sm sticky top-0 z-40 transition-all rounded-b-[24px] bg-white text-slate-800"
+                style={{
+                    backgroundImage: headerBackgroundImage ? `url(${headerBackgroundImage})` : 'none',
+                    backgroundColor: headerBackgroundImage ? 'transparent' : 'white', // Maintain white if no image
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                }}
+            >
                 {/* Row 1: Title & Actions */}
                 <div className="flex justify-between items-center mb-4">
                     <div className="flex items-center gap-2 group cursor-pointer" onClick={() => {
                         const newTitle = prompt("修改標題名稱:", appTitle);
                         if(newTitle) onTitleChange(newTitle);
                     }}>
-                        <h1 className="text-2xl font-black tracking-tight drop-shadow-sm">{appTitle}</h1>
-                        <Pencil size={14} className="text-slate-400 group-hover:text-sky-500 transition-colors"/>
+                        {/* Add shadow to text if header has background for better readability */}
+                        <h1 className={`text-2xl font-black tracking-tight ${headerBackgroundImage ? 'drop-shadow-md text-white' : 'drop-shadow-sm'}`}>{appTitle}</h1>
+                        <Pencil size={14} className={`${headerBackgroundImage ? 'text-white/70' : 'text-slate-400'} group-hover:text-sky-500 transition-colors`}/>
                     </div>
                     <div className="flex gap-2">
+                        {/* New Quick BG Switcher */}
+                         <button 
+                            onClick={onQuickBgChange} 
+                            className="w-9 h-9 rounded-full bg-slate-50/50 border border-slate-100/50 flex items-center justify-center text-slate-500 hover:text-sky-600 hover:bg-white transition-all shadow-sm"
+                            title="切換背景"
+                        >
+                            <Palette size={16}/>
+                        </button>
                         {isSelectionMode && (
                             <button 
                                 onClick={onSelectAll} 
@@ -659,17 +702,19 @@
                                 value={searchQuery}
                                 onChange={e => setSearchQuery(e.target.value)}
                                 placeholder="搜尋..." 
-                                className="w-full pl-10 pr-3 py-2.5 text-sm bg-slate-50 border border-slate-100 focus:bg-white focus:border-sky-200 rounded-2xl outline-none font-medium text-slate-700 transition-all placeholder:text-slate-400" 
+                                className="w-full pl-10 pr-3 py-2.5 text-sm bg-slate-50/80 backdrop-blur-sm border border-slate-100 focus:bg-white focus:border-sky-200 rounded-2xl outline-none font-medium text-slate-700 transition-all placeholder:text-slate-400" 
                             />
                         </div>
-                         {/* New Tag Dropdown */}
+                         {/* New Tag Dropdown with Special Filters */}
                         <div className="relative">
                             <select
                                 value={activeTag}
                                 onChange={(e) => setActiveTag(e.target.value)}
-                                className="appearance-none bg-slate-50 border border-slate-100 text-xs font-bold text-slate-600 rounded-2xl h-full pl-3 pr-8 outline-none focus:ring-2 focus:ring-sky-200 hover:bg-slate-100 transition-colors"
+                                className="appearance-none bg-slate-50/80 backdrop-blur-sm border border-slate-100 text-xs font-bold text-slate-600 rounded-2xl h-full pl-3 pr-8 outline-none focus:ring-2 focus:ring-sky-200 hover:bg-slate-100 transition-colors"
                             >
                                 <option value="all">全標籤</option>
+                                <option value="special_expiring">[自動] 快到期</option>
+                                <option value="special_duplicate">[自動] 重複序號</option>
                                 {allTags.map(t => <option key={t} value={t}>{t}</option>)}
                             </select>
                             <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"/>
@@ -679,7 +724,7 @@
                     {/* View Switcher, Sort, Layout */}
                     <div className="flex justify-between items-center gap-2">
                          {/* New View Switcher in Header */}
-                         <div className="flex bg-slate-100 p-1 rounded-2xl">
+                         <div className="flex bg-slate-100/80 backdrop-blur-sm p-1 rounded-2xl">
                             {[
                                 {id: 'active', icon: ListTodo, label: '待用'},
                                 {id: 'completed', icon: CheckCircle2, label: '已用'},
@@ -702,15 +747,18 @@
                                     const nextIdx = (types.indexOf(sortType) + 1) % types.length;
                                     setSortType(types[nextIdx]);
                                 }}
-                                className="w-9 h-9 bg-slate-50 hover:bg-slate-100 border border-slate-100 rounded-full flex items-center justify-center text-slate-600 transition-all"
-                                title={sortType === 'expiring' ? '快到期' : sortType === 'newest' ? '最新' : '最舊'}
+                                className="px-2 h-9 bg-slate-50/80 backdrop-blur-sm hover:bg-slate-100 border border-slate-100 rounded-2xl flex items-center justify-center text-slate-600 transition-all gap-1"
+                                title="切換排序"
                             >
-                                <ArrowUpDown size={16} className="text-sky-500"/>
+                                <ArrowUpDown size={14} className="text-sky-500"/>
+                                <span className="text-[10px] font-bold">
+                                    {sortType === 'expiring' ? '快到期' : sortType === 'newest' ? '最新' : '最舊'}
+                                </span>
                             </button>
                             {/* Compact Mode Toggle */}
                             <button 
                                 onClick={() => setIsCompact(!isCompact)}
-                                className={`w-9 h-9 flex items-center justify-center rounded-full transition-all border ${isCompact ? 'bg-sky-500 text-white border-sky-500' : 'bg-slate-50 text-slate-500 hover:bg-slate-100 border-slate-100'}`}
+                                className={`w-9 h-9 flex items-center justify-center rounded-full transition-all border ${isCompact ? 'bg-sky-500 text-white border-sky-500' : 'bg-slate-50/80 backdrop-blur-sm text-slate-500 hover:bg-slate-100 border-slate-100'}`}
                                 title={isCompact ? "切換至展開模式" : "切換至列表模式"}
                             >
                                 {isCompact ? <Rows size={16}/> : <LayoutGrid size={16}/>}
@@ -1258,6 +1306,7 @@
                         viewConfigs: {
                             active: {
                                 backgroundImage: saved.backgroundImage || '',
+                                headerBackgroundImage: '', // Add new field
                                 cardOpacity: saved.cardOpacity !== undefined ? saved.cardOpacity : 0.95,
                                 bgPosY: saved.bgPosY || 50,
                                 bgSize: saved.bgSize || 'cover',
@@ -1265,20 +1314,24 @@
                                 compactHeight: 70,
                                 compactShowImage: false
                             },
-                            completed: { ...defaultViewConfig }, // Use defaults for others initially
+                            completed: { ...defaultViewConfig }, 
                             deleted: { ...defaultViewConfig }
                         }
                     };
                 }
 
-                // If already migrated structure
+                // If already migrated structure, check if new fields exist
+                const activeConfig = saved.viewConfigs?.active || {};
+                const completedConfig = saved.viewConfigs?.completed || {};
+                const deletedConfig = saved.viewConfigs?.deleted || {};
+
                 return {
                     ...defaults,
                     ...saved,
                     viewConfigs: {
-                        active: { ...defaultViewConfig, ...saved.viewConfigs?.active },
-                        completed: { ...defaultViewConfig, ...saved.viewConfigs?.completed },
-                        deleted: { ...defaultViewConfig, ...saved.viewConfigs?.deleted },
+                        active: { ...defaultViewConfig, ...activeConfig, headerBackgroundImage: activeConfig.headerBackgroundImage || '' },
+                        completed: { ...defaultViewConfig, ...completedConfig, headerBackgroundImage: completedConfig.headerBackgroundImage || '' },
+                        deleted: { ...defaultViewConfig, ...deletedConfig, headerBackgroundImage: deletedConfig.headerBackgroundImage || '' },
                     }
                 };
             });
@@ -1358,6 +1411,15 @@
                     if (view === 'active' && (t.completed || t.isDeleted)) return false;
                     if (view === 'completed' && (!t.completed || t.isDeleted)) return false;
                     if (view === 'deleted' && !t.isDeleted) return false;
+                    
+                    // Special Filter Logic
+                    if (activeTag === 'special_expiring') {
+                        return checkIsExpiringSoon(t.expiry, settings.notifyDays) && !t.completed && !t.isDeleted;
+                    }
+                    if (activeTag === 'special_duplicate') {
+                        return duplicateSerials.has(t.serial) && !t.completed && !t.isDeleted;
+                    }
+
                     if (activeTag !== 'all' && (!t.tags || !t.tags.includes(activeTag))) return false;
                     if (searchQuery) {
                         const q = searchQuery.toLowerCase();
@@ -1367,11 +1429,17 @@
                 });
                 
                 result.sort((a, b) => {
-                    // 3. Sort Logic: Duplicates first (only in active/completed view usually, but doing global)
+                    // 1. Always Pin Expiring Items (Top Priority)
+                    const isExpiringA = !a.completed && !a.isDeleted && checkIsExpiringSoon(a.expiry, settings.notifyDays);
+                    const isExpiringB = !b.completed && !b.isDeleted && checkIsExpiringSoon(b.expiry, settings.notifyDays);
+                    if (isExpiringA !== isExpiringB) return isExpiringA ? -1 : 1;
+
+                    // 2. Duplicates Second (Existing Logic)
                     const isDupA = duplicateSerials.has(a.serial) && !a.completed && !a.isDeleted;
                     const isDupB = duplicateSerials.has(b.serial) && !b.completed && !b.isDeleted;
                     if (isDupA !== isDupB) return isDupA ? -1 : 1;
 
+                    // 3. Selected Sort Type
                     if (sortType === 'expiring') {
                         const dateA = a.expiry ? new Date(a.expiry.replace(/\//g, '-')) : new Date(9999, 11, 31);
                         const dateB = b.expiry ? new Date(b.expiry.replace(/\//g, '-')) : new Date(9999, 11, 31);
@@ -1380,7 +1448,7 @@
                     else return a.createdAt - b.createdAt;
                 });
                 return result;
-            }, [tasks, view, activeTag, searchQuery, sortType, duplicateSerials]);
+            }, [tasks, view, activeTag, searchQuery, sortType, duplicateSerials, settings.notifyDays]);
 
             const handleAddBatch = (newItems) => setTasks(prev => [...newItems, ...prev]);
             const handleUpdate = (updatedTicket) => setTasks(prev => prev.map(t => t.id === updatedTicket.id ? updatedTicket : t));
@@ -1511,6 +1579,30 @@
                 }
             };
 
+            // New: Quick Switch BG Logic
+            const handleQuickBgChange = () => {
+                const history = [''].concat(bgHistory); // '' represents no bg
+                const currentBg = settings.viewConfigs[view].backgroundImage || '';
+                let currentIndex = history.indexOf(currentBg);
+                
+                // If current BG is not in history (e.g. freshly uploaded), start from 0
+                if (currentIndex === -1) currentIndex = 0;
+
+                const nextIndex = (currentIndex + 1) % history.length;
+                const nextBg = history[nextIndex];
+
+                setSettings(prev => ({
+                    ...prev,
+                    viewConfigs: {
+                        ...prev.viewConfigs,
+                        [view]: {
+                            ...prev.viewConfigs[view],
+                            backgroundImage: nextBg
+                        }
+                    }
+                }));
+            };
+
             // Get current view config based on 'view' state
             const currentConfig = settings.viewConfigs[view] || defaultViewConfig;
 
@@ -1557,6 +1649,8 @@
                             view={view} setView={setView}
                             activeTag={activeTag} setActiveTag={setActiveTag}
                             allTags={allTags}
+                            onQuickBgChange={handleQuickBgChange}
+                            headerBackgroundImage={currentConfig.headerBackgroundImage}
                         />
                         
                         {/* Removed TagTabs Component */}
