@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>票券管家 Fresh (Wallet UI)</title>
+    <title>離線票券管家 Fresh (Wallet UI)</title>
 
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -108,7 +108,7 @@
             ImagePlus, Heart, HeartHandshake, Eye, EyeOff, Globe, BookOpen, Star, History, MousePointerClick, Layers,
             CalendarX2, CopyPlus, Lightbulb, Loader2, QrCode, SlidersHorizontal, ArrowUpDown, Image, CheckCheck, SendHorizontal, XCircle, Droplets,
             MoveVertical, BoxSelect, Monitor, Palette, Rows, LayoutGrid, ChevronRight, ChevronDown as ChevronDownIcon,
-            PanelTop
+            PanelTop, PaintBucket // Added PaintBucket
         } from 'lucide-react';
 
         // --- 1. Core Logic (Helpers) ---
@@ -312,11 +312,12 @@
 
         const defaultViewConfig = {
             backgroundImage: '', 
-            headerBackgroundImage: '', // New: Header BG
+            headerBackgroundImage: '', 
             cardOpacity: 0.95, 
             bgPosY: 50, 
             bgSize: 'cover',
             cardBgColor: '#ffffff',
+            cardBorderColor: '#e2e8f0', // New Default
             compactHeight: 70,
             compactShowImage: false
         };
@@ -359,7 +360,6 @@
             const handleBgUpload = async (e) => {
                 const file = e.target.files[0];
                 if(file) {
-                    // CR-FIX: Reduced limit to 5MB
                     if(file.size > 5 * 1024 * 1024) { alert("圖片過大 (超過 5MB)，請使用較小的圖片以免造成當機。"); return; }
                     try {
                         const base64 = await compressImage(file);
@@ -371,7 +371,6 @@
             const handleHeaderBgUpload = async (e) => {
                 const file = e.target.files[0];
                 if(file) {
-                    // CR-FIX: Reduced limit to 5MB
                     if(file.size > 5 * 1024 * 1024) { alert("圖片過大 (超過 5MB)，請使用較小的圖片以免造成當機。"); return; }
                     try {
                         const base64 = await compressImage(file);
@@ -558,6 +557,20 @@
                                                     type="color" 
                                                     value={currentViewConfig.cardBgColor}
                                                     onChange={e => handleViewConfigChange('cardBgColor', e.target.value)}
+                                                    className="w-6 h-6 rounded overflow-hidden border-none outline-none cursor-pointer"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* Border Color Picker - NEW */}
+                                        <div className="flex justify-between items-center">
+                                            <label className="text-xs font-bold text-slate-500 flex items-center gap-1"><PaintBucket size={12}/> 卡片邊框</label>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-[10px] font-mono text-slate-400">{currentViewConfig.cardBorderColor || '#e2e8f0'}</span>
+                                                <input 
+                                                    type="color" 
+                                                    value={currentViewConfig.cardBorderColor || '#e2e8f0'}
+                                                    onChange={e => handleViewConfigChange('cardBorderColor', e.target.value)}
                                                     className="w-6 h-6 rounded overflow-hidden border-none outline-none cursor-pointer"
                                                 />
                                             </div>
@@ -778,22 +791,34 @@
 
         // Removed TagTabs component as it is now integrated into Header
 
-        const TicketCard = ({ ticket, onClick, notifyDays, isSelectionMode, isSelected, onSelect, isDuplicate, opacity = 0.95, cardBgColor = '#ffffff', isCompact, compactHeight = 70, compactShowImage = false }) => {
+        const TicketCard = ({ ticket, onClick, notifyDays, isSelectionMode, isSelected, onSelect, isDuplicate, opacity = 0.95, cardBgColor = '#ffffff', cardBorderColor = '#e2e8f0', isCompact, compactHeight = 70, compactShowImage = false }) => {
             const isExpiring = !ticket.completed && ticket.expiry && checkIsExpiringSoon(ticket.expiry, notifyDays);
             
-            const duplicateStyle = isDuplicate && !ticket.completed && !ticket.isDeleted 
-                ? 'border-red-500 ring-2 ring-red-100 shadow-red-200' 
-                : '';
+            const isDuplicateWarning = isDuplicate && !ticket.completed && !ticket.isDeleted;
+            const isExpiringWarning = isExpiring && !ticket.completed && !ticket.isDeleted;
 
             // Dynamic Background calculation
             const { r, g, b } = hexToRgb(cardBgColor);
-            
             let bgBase = `rgba(${r}, ${g}, ${b}, ${opacity})`;
             
+            // Border Logic
             let overlayClass = '';
-            if (isSelected) overlayClass = 'bg-sky-500/10 ring-2 ring-sky-500 border-sky-500';
-            else if (isExpiring && !ticket.completed && !ticket.isDeleted) overlayClass = 'bg-red-500/10 border-red-400 shadow-red-100';
-            else overlayClass = 'border-slate-100 hover:border-sky-200 hover:shadow-md';
+            let dynamicBorderStyle = {};
+
+            if (isSelected) {
+                overlayClass = 'bg-sky-500/10 ring-2 ring-sky-500 border-sky-500';
+            } else if (isExpiringWarning) {
+                overlayClass = 'bg-red-500/10 border-red-400 shadow-red-100';
+            } else {
+                // Normal state: use custom border color
+                overlayClass = 'hover:shadow-md border';
+                dynamicBorderStyle = { borderColor: cardBorderColor };
+            }
+
+            // Duplicate always adds red border on top if needed (using ring for visibility or border override)
+            // But if it's already red from expiring, duplicate just adds duplication label
+            // If duplicate but not expiring, we need red border.
+            const duplicateClass = isDuplicateWarning ? 'border-red-500 ring-2 ring-red-100 shadow-red-200' : '';
 
             // --- Compact Mode Render (Tighter) ---
             if (isCompact) {
@@ -803,8 +828,8 @@
                             if(isSelectionMode) onSelect(ticket.id);
                             else onClick(ticket);
                         }}
-                        style={{ backgroundColor: bgBase, height: `${compactHeight}px` }}
-                        className={`backdrop-blur-sm mx-2 mb-1 px-2 rounded-lg shadow-sm border flex items-center gap-2 active:scale-[0.98] transition-all cursor-pointer relative overflow-hidden group ${overlayClass} ${duplicateStyle}`}
+                        style={{ backgroundColor: bgBase, height: `${compactHeight}px`, ...(!isSelected && !isExpiringWarning && !isDuplicateWarning ? dynamicBorderStyle : {}) }}
+                        className={`backdrop-blur-sm mx-2 mb-1 px-2 rounded-lg shadow-sm flex items-center gap-2 active:scale-[0.98] transition-all cursor-pointer relative overflow-hidden group ${overlayClass} ${duplicateClass}`}
                     >
                         {isSelectionMode && (
                             <div className={`w-4 h-4 flex-shrink-0 rounded-full border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-sky-500 border-sky-500' : 'border-slate-300 bg-white'}`}>
@@ -827,7 +852,7 @@
                         
                         <div className="flex-1 min-w-0 flex flex-col justify-center">
                             <div className="flex items-center gap-2">
-                                {isDuplicate && !ticket.completed && !ticket.isDeleted && (
+                                {isDuplicateWarning && (
                                     <span className="text-[9px] bg-red-500 text-white px-1.5 py-0.5 rounded font-bold">重複</span>
                                 )}
                                 <h3 className={`font-bold text-slate-800 line-clamp-1 text-sm ${ticket.completed ? 'line-through text-slate-400' : ''}`}>
@@ -835,7 +860,8 @@
                                 </h3>
                             </div>
                             <div className="flex items-center gap-2 mt-0.5">
-                                {isExpiring && !ticket.completed && !ticket.isDeleted && <span className="text-[9px] font-bold text-red-500 flex items-center gap-0.5"><AlertCircle size={9}/> 快到期</span>}
+                                {isExpiringWarning && <span className="text-[9px] font-bold text-red-500 flex items-center gap-0.5"><AlertCircle size={9}/> 快到期</span>}
+                                {/* Modified: text-slate-400 -> text-emerald-500 for normal expiry text */}
                                 <span className={`text-[10px] font-bold ${ticket.completed ? 'text-emerald-600' : 'text-emerald-500'}`}>
                                     {ticket.completed ? `已用 ${formatTime(ticket.completedAt)}` : (ticket.expiry || '無期限')}
                                 </span>
@@ -858,8 +884,8 @@
                         if(isSelectionMode) onSelect(ticket.id);
                         else onClick(ticket);
                     }}
-                    style={{ backgroundColor: bgBase }}
-                    className={`backdrop-blur-sm mx-4 mt-4 p-4 rounded-3xl shadow-sm border flex gap-4 active:scale-[0.98] transition-all cursor-pointer relative overflow-hidden group ${overlayClass} ${duplicateStyle}`}
+                    style={{ backgroundColor: bgBase, ...(!isSelected && !isExpiringWarning && !isDuplicateWarning ? dynamicBorderStyle : {}) }}
+                    className={`backdrop-blur-sm mx-4 mt-4 p-4 rounded-3xl shadow-sm flex gap-4 active:scale-[0.98] transition-all cursor-pointer relative overflow-hidden group ${overlayClass} ${duplicateClass}`}
                 >
                     {isSelectionMode && (
                         <div className={`absolute top-3 right-3 z-20 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-sky-500 border-sky-500' : 'border-slate-300 bg-white'}`}>
@@ -867,7 +893,7 @@
                         </div>
                     )}
                     
-                    {isDuplicate && !ticket.completed && !ticket.isDeleted && (
+                    {isDuplicateWarning && (
                         <div className="absolute top-0 left-0 bg-red-500 text-white text-[9px] px-2 py-0.5 rounded-br-lg z-20 font-bold">
                             重複序號
                         </div>
@@ -893,7 +919,7 @@
                                 </h3>
                                 {ticket.completed && <span className="bg-slate-100 text-slate-500 text-[10px] px-2 py-0.5 rounded-full font-bold">已使用</span>}
                             </div>
-                            {isExpiring && !ticket.completed && !ticket.isDeleted && <div className="text-[10px] font-bold text-red-500 mt-1 flex items-center gap-1 animate-pulse"><AlertCircle size={10}/> 快到期</div>}
+                            {isExpiringWarning && <div className="text-[10px] font-bold text-red-500 mt-1 flex items-center gap-1 animate-pulse"><AlertCircle size={10}/> 快到期</div>}
                             
                             <div className="flex gap-1.5 mt-2 overflow-x-auto no-scrollbar">
                                 {ticket.tags && ticket.tags.map(t => (
@@ -909,7 +935,8 @@
                                     <CheckCircle2 size={10}/> <span>核銷於 {formatDateTime(ticket.completedAt)}</span>
                                 </div>
                             ) : (
-                                <div className={`text-xs font-bold flex items-center gap-1.5 ${isExpiring ? 'text-red-500' : 'text-slate-400'}`}>
+                                /* Modified: text-slate-400 -> text-emerald-500 for normal expiry text */
+                                <div className={`text-xs font-bold flex items-center gap-1.5 ${isExpiring ? 'text-red-500' : 'text-emerald-500'}`}>
                                     <Clock size={12}/> <span>{ticket.expiry || '無期限'}</span>
                                 </div>
                             )}
@@ -1318,6 +1345,7 @@
                                 bgPosY: saved.bgPosY || 50,
                                 bgSize: saved.bgSize || 'cover',
                                 cardBgColor: '#ffffff',
+                                cardBorderColor: '#e2e8f0', // Add new field
                                 compactHeight: 70,
                                 compactShowImage: false
                             },
@@ -1336,9 +1364,9 @@
                     ...defaults,
                     ...saved,
                     viewConfigs: {
-                        active: { ...defaultViewConfig, ...activeConfig, headerBackgroundImage: activeConfig.headerBackgroundImage || '' },
-                        completed: { ...defaultViewConfig, ...completedConfig, headerBackgroundImage: completedConfig.headerBackgroundImage || '' },
-                        deleted: { ...defaultViewConfig, ...deletedConfig, headerBackgroundImage: deletedConfig.headerBackgroundImage || '' },
+                        active: { ...defaultViewConfig, ...activeConfig, headerBackgroundImage: activeConfig.headerBackgroundImage || '', cardBorderColor: activeConfig.cardBorderColor || '#e2e8f0' },
+                        completed: { ...defaultViewConfig, ...completedConfig, headerBackgroundImage: completedConfig.headerBackgroundImage || '', cardBorderColor: completedConfig.cardBorderColor || '#e2e8f0' },
+                        deleted: { ...defaultViewConfig, ...deletedConfig, headerBackgroundImage: deletedConfig.headerBackgroundImage || '', cardBorderColor: deletedConfig.cardBorderColor || '#e2e8f0' },
                     }
                 };
             });
@@ -1673,6 +1701,7 @@
                                         isDuplicate={duplicateSerials.has(ticket.serial)}
                                         opacity={currentConfig.cardOpacity}
                                         cardBgColor={currentConfig.cardBgColor}
+                                        cardBorderColor={currentConfig.cardBorderColor} // Pass prop
                                         isCompact={isCompact}
                                         // Pass new compact props
                                         compactHeight={currentConfig.compactHeight}
