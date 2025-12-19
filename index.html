@@ -108,7 +108,7 @@
             ImagePlus, Heart, HeartHandshake, Eye, EyeOff, Globe, BookOpen, Star, History, MousePointerClick, Layers,
             CalendarX2, CopyPlus, Lightbulb, Loader2, QrCode, SlidersHorizontal, ArrowUpDown, Image, CheckCheck, SendHorizontal, XCircle, Droplets,
             MoveVertical, BoxSelect, Monitor, Palette, Rows, LayoutGrid, ChevronRight, ChevronDown as ChevronDownIcon,
-            PanelTop, PaintBucket, Maximize, Move
+            PanelTop, PaintBucket, Maximize, Move, Eye as PreviewIcon
         } from 'lucide-react';
 
         // --- 1. Core Logic (Helpers & DB) ---
@@ -365,7 +365,6 @@
             headerBackgroundImage: '', 
             cardOpacity: 0.95, 
             bgPosY: 50, 
-            // [CR-IMPL] 修改: bgSize 預設值改為 100 (百分比)
             bgSize: 100,
             cardBgColor: '#ffffff',
             cardBorderColor: '#e2e8f0',
@@ -388,17 +387,39 @@
                 setLocalSettings(prev => ({ ...prev, [key]: value }));
             };
 
+            // [CR-IMPL] 修改: 更新設定邏輯，加入全域圖片設定共享 (bgConfigMap)
             const handleViewConfigChange = (key, value) => {
-                setLocalSettings(prev => ({
-                    ...prev,
-                    viewConfigs: {
-                        ...prev.viewConfigs,
-                        [currentTab]: {
-                            ...prev.viewConfigs[currentTab],
-                            [key]: value
+                setLocalSettings(prev => {
+                    let next = { ...prev };
+                    let currentView = { ...next.viewConfigs[currentTab] };
+                    
+                    // 1. 更新目前的視圖欄位
+                    currentView[key] = value;
+                    
+                    const imageUrl = currentView.backgroundImage;
+                    
+                    // 2. 初始化映射表
+                    if (!next.bgConfigMap) next.bgConfigMap = {};
+                    
+                    // 3. 全域共享邏輯
+                    if (key === 'backgroundImage' && value) {
+                        // 若切換到一張已有設定的圖，自動套用該圖的全域設定
+                        const sharedConfig = next.bgConfigMap[value];
+                        if (sharedConfig) {
+                            currentView.bgSize = sharedConfig.bgSize;
+                            currentView.bgPosY = sharedConfig.bgPosY;
                         }
+                    } else if (imageUrl && (key === 'bgSize' || key === 'bgPosY')) {
+                        // 若調整尺寸或位置，同步更新到該圖的全域映射表中
+                        next.bgConfigMap[imageUrl] = {
+                            ...next.bgConfigMap[imageUrl],
+                            [key]: value
+                        };
                     }
-                }));
+                    
+                    next.viewConfigs = { ...next.viewConfigs, [currentTab]: currentView };
+                    return next;
+                });
             };
 
             const handleSave = () => {
@@ -532,10 +553,28 @@
                                         </div>
                                     </div>
 
-                                    {/* [CR-IMPL] 新增: 背景縮放與垂直位置控制滑桿 */}
+                                    {/* [CR-IMPL] 新增: 即時預覽縮圖與滑桿控制項 */}
                                     <div className="bg-slate-50 p-3 rounded-xl space-y-3">
+                                        {/* Preview Area */}
+                                        {currentViewConfig.backgroundImage && (
+                                            <div className="w-full h-24 bg-slate-200 rounded-xl border border-slate-300 relative overflow-hidden flex items-center justify-center">
+                                                <div 
+                                                    className="absolute inset-0 w-full h-full pointer-events-none transition-all duration-75"
+                                                    style={{
+                                                        backgroundImage: `url(${currentViewConfig.backgroundImage})`,
+                                                        backgroundSize: `${currentViewConfig.bgSize || 100}% auto`,
+                                                        backgroundPosition: `center ${currentViewConfig.bgPosY || 50}%`,
+                                                        backgroundRepeat: 'no-repeat'
+                                                    }}
+                                                />
+                                                <div className="absolute top-1 right-1 bg-black/40 backdrop-blur-sm text-white text-[9px] px-1.5 py-0.5 rounded-lg font-bold flex items-center gap-1 shadow-sm">
+                                                    <PreviewIcon size={8}/> 調整預覽
+                                                </div>
+                                            </div>
+                                        )}
+
                                         <div>
-                                            <div className="flex justify-between items-center mb-2">
+                                            <div className="flex justify-between items-center mb-1">
                                                 <label className="text-xs font-bold text-slate-500 flex items-center gap-1"><Maximize size={12}/> 背景縮放 (寬度 %)</label>
                                                 <span className="text-xs font-bold text-sky-600">{currentViewConfig.bgSize || 100}%</span>
                                             </div>
@@ -548,7 +587,7 @@
                                         </div>
 
                                         <div>
-                                            <div className="flex justify-between items-center mb-2">
+                                            <div className="flex justify-between items-center mb-1">
                                                 <label className="text-xs font-bold text-slate-500 flex items-center gap-1"><Move size={12}/> 背景垂直位置</label>
                                                 <span className="text-xs font-bold text-sky-600">{currentViewConfig.bgPosY || 50}%</span>
                                             </div>
@@ -618,7 +657,7 @@
                                         />
 
                                         <div className="flex justify-between items-center mt-2">
-                                            <label className="text-xs font-bold text-slate-500 flex items-center gap-1"><Image size={12}/> 列表顯示圖片</label>
+                                            <label className="text-xs font-bold text-slate-500 flex items-center gap-1"><ImageIcon size={12}/> 列表顯示圖片</label>
                                             <button 
                                                 onClick={() => handleViewConfigChange('compactShowImage', !currentViewConfig.compactShowImage)}
                                                 className={`w-10 h-5 rounded-full relative transition-colors ${currentViewConfig.compactShowImage ? 'bg-sky-500' : 'bg-slate-300'}`}
@@ -1271,6 +1310,7 @@
             const [showBatchModal, setShowBatchModal] = useState(false);
             const [settings, setSettings] = useState({ 
                 tgToken: '', tgChatId: '', notifyDays: 7, appTitle: '我的票夾',
+                bgConfigMap: {}, // [CR-IMPL] 新增: 全域圖片設定映射表
                 viewConfigs: {
                     active: { ...defaultViewConfig },
                     completed: { ...defaultViewConfig },
@@ -1304,7 +1344,6 @@
 
                         if (dbTasks) setTasks(dbTasks);
                         if (dbSettings) {
-                            // [CR-IMPL] 修改: 資料初始化遷移，若 bgSize 為非數值 (如 'cover') 則重置為 100
                             const migrateConfig = (config) => ({
                                 ...defaultViewConfig,
                                 ...config,
@@ -1315,6 +1354,7 @@
                             const mergedSettings = {
                                 ...settings,
                                 ...dbSettings,
+                                bgConfigMap: dbSettings.bgConfigMap || {}, // [CR-IMPL] 初始化映射表
                                 viewConfigs: {
                                     active: migrateConfig(dbSettings.viewConfigs?.active),
                                     completed: migrateConfig(dbSettings.viewConfigs?.completed),
@@ -1553,16 +1593,21 @@
                 const nextIndex = (currentIndex + 1) % history.length;
                 const nextBg = history[nextIndex];
 
-                setSettings(prev => ({
-                    ...prev,
-                    viewConfigs: {
-                        ...prev.viewConfigs,
-                        [view]: {
-                            ...prev.viewConfigs[view],
-                            backgroundImage: nextBg
-                        }
+                // [CR-IMPL] 切換背景時同樣套用全域共享邏輯
+                setSettings(prev => {
+                    let next = { ...prev };
+                    let currentView = { ...next.viewConfigs[view] };
+                    currentView.backgroundImage = nextBg;
+                    
+                    const sharedConfig = next.bgConfigMap?.[nextBg];
+                    if (sharedConfig) {
+                        currentView.bgSize = sharedConfig.bgSize;
+                        currentView.bgPosY = sharedConfig.bgPosY;
                     }
-                }));
+                    
+                    next.viewConfigs = { ...next.viewConfigs, [view]: currentView };
+                    return next;
+                });
             };
 
             if (!isDataLoaded) {
@@ -1584,7 +1629,6 @@
                             style={{
                                 top: '190px',
                                 backgroundImage: `url(${currentConfig.backgroundImage})`,
-                                // [CR-IMPL] 修改: 連動 bgSize (寬度) 與 bgPosY (垂直位置) 樣式
                                 backgroundSize: `${currentConfig.bgSize || 100}% auto`, 
                                 backgroundPosition: `center ${currentConfig.bgPosY || 50}%`,
                                 backgroundRepeat: 'no-repeat',
