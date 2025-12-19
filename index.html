@@ -1264,6 +1264,10 @@
             const [selectedIds, setSelectedIds] = useState(new Set());
             const [showBatchModal, setShowBatchModal] = useState(false);
 
+            // [CR-IMPL] 新增: 儲存空間防禦狀態
+            const [isStorageFull, setIsStorageFull] = useState(false);
+            const [storageAlert, setStorageAlert] = useState("");
+
             // Settings State Initialization with Migration Logic
             const [settings, setSettings] = useState(() => {
                 const saved = JSON.parse(localStorage.getItem('wallet_settings_v3'));
@@ -1304,7 +1308,6 @@
                     };
                 }
 
-                // If already migrated structure, check if new fields exist
                 const activeConfig = saved.viewConfigs?.active || {};
                 const completedConfig = saved.viewConfigs?.completed || {};
                 const deletedConfig = saved.viewConfigs?.deleted || {};
@@ -1326,20 +1329,44 @@
             const [showSettings, setShowSettings] = useState(false);
             const [showTagManager, setShowTagManager] = useState(false);
             
-            // Persist
-            // [CR-IMPL] 修改: 移除 QuotaExceededError 的 try-catch 攔截與 alert 警告
+            // [CR-IMPL] 修改: 重新加入 try-catch 攔截 QuotaExceededError 並加入自動清理邏輯
             useEffect(() => {
-                localStorage.setItem('wallet_tasks_v3', JSON.stringify(tasks));
+                try {
+                    localStorage.setItem('wallet_tasks_v3', JSON.stringify(tasks));
+                    setIsStorageFull(false);
+                } catch (e) {
+                    if (e.name === 'QuotaExceededError') {
+                        setIsStorageFull(true);
+                        setStorageAlert("儲存空間已滿！無法儲存票券資料。");
+                        // 嘗試清理背景歷史以騰出空間
+                        if (bgHistory.length > 0) {
+                            setBgHistory([]);
+                            localStorage.removeItem('wallet_bg_history_v3');
+                            setStorageAlert("空間接近上限，已自動清理背景紀錄。");
+                        }
+                    }
+                }
             }, [tasks]);
 
-            // [CR-IMPL] 修改: 移除 Settings 存檔的 try-catch 攔截
             useEffect(() => {
-                localStorage.setItem('wallet_settings_v3', JSON.stringify(settings));
+                try {
+                    localStorage.setItem('wallet_settings_v3', JSON.stringify(settings));
+                    setIsStorageFull(false);
+                } catch (e) {
+                    if (e.name === 'QuotaExceededError') {
+                        setIsStorageFull(true);
+                        setStorageAlert("空間不足，無法儲存設定與背景圖片。");
+                    }
+                }
             }, [settings]);
 
-            // [CR-IMPL] 修改: 移除 History 存檔的 try-catch 攔截
             useEffect(() => {
-                localStorage.setItem('wallet_bg_history_v3', JSON.stringify(bgHistory));
+                try {
+                    localStorage.setItem('wallet_bg_history_v3', JSON.stringify(bgHistory));
+                } catch (e) {
+                    // 背景歷史屬非核心資料，若空間不足則安靜失敗，不顯示白屏
+                    console.warn("Storage full: Could not save bg history");
+                }
             }, [bgHistory]);
 
             // Notification Check
@@ -1388,7 +1415,6 @@
                     if (view === 'completed' && (!t.completed || t.isDeleted)) return false;
                     if (view === 'deleted' && !t.isDeleted) return false;
                     
-                    // Special Filter Logic
                     if (activeTag === 'special_expiring') {
                         return checkIsExpiringSoon(t.expiry, settings.notifyDays) && !t.completed && !t.isDeleted;
                     }
@@ -1405,17 +1431,14 @@
                 });
                 
                 result.sort((a, b) => {
-                    // 1. Always Pin Expiring Items (Top Priority)
                     const isExpiringA = !a.completed && !a.isDeleted && checkIsExpiringSoon(a.expiry, settings.notifyDays);
                     const isExpiringB = !b.completed && !b.isDeleted && checkIsExpiringSoon(b.expiry, settings.notifyDays);
                     if (isExpiringA !== isExpiringB) return isExpiringA ? -1 : 1;
 
-                    // 2. Duplicates Second (Existing Logic)
                     const isDupA = duplicateSerials.has(a.serial) && !a.completed && !a.isDeleted;
                     const isDupB = duplicateSerials.has(b.serial) && !b.completed && !b.isDeleted;
                     if (isDupA !== isDupB) return isDupA ? -1 : 1;
 
-                    // 3. Selected Sort Type
                     if (sortType === 'expiring') {
                         const dateA = a.expiry ? new Date(a.expiry.replace(/\//g, '-')) : new Date(9999, 11, 31);
                         const dateB = b.expiry ? new Date(b.expiry.replace(/\//g, '-')) : new Date(9999, 11, 31);
@@ -1438,7 +1461,6 @@
                 if (newStatus && settings.tgToken && settings.tgChatId) {
                    const tagStr = ticket.tags && ticket.tags.length > 0 ? ` [${ticket.tags.join(', ')}]` : '';
                    const serialStr = ticket.serial ? `\n🔢 序號: \`${ticket.serial}\`` : '';
-                   // Changed: Use formatDateTime to include HH:mm
                    const timeStr = `\n⏰ 時間: ${formatDateTime(completedAt)}`;
                    const msg = `✅ *[已核銷]* ${ticket.productName}\n📅 期限: ${ticket.expiry || '無'}${serialStr}${timeStr}${tagStr}`;
                    sendTelegramMessage(settings.tgToken, settings.tgChatId, msg).catch(e => console.error(e));
@@ -1458,7 +1480,7 @@
                 const backupData = {
                     version: 3,
                     timestamp: Date.now(),
-                    settings: settings, // Stores the new structure
+                    settings: settings,
                     tasks: tasks
                 };
                 const blob = new Blob([JSON.stringify(backupData, null, 2)], {type: "application/json"});
@@ -1492,8 +1514,6 @@
                                     setTasks(importedTasks);
                                     alert(`匯入成功 (覆蓋模式)！共 ${importedTasks.length} 筆票券${confirmSettings ? ' (含設定)' : ''}`);
                                 }
-                            } else {
-                                if(mode !== null) alert("取消匯入");
                             }
 
                         } catch(e){alert("格式錯誤");} 
@@ -1502,7 +1522,6 @@
                 }; input.click();
             };
 
-            // [CR-IMPL] 新增: 系統徹底重設函式，用於清空所有儲存空間
             const handleFullReset = () => {
                 if (window.confirm("⚠️ 注意：這將刪除所有票券、設定與背景紀錄，且無法復原。確定要徹底重設嗎？")) {
                     localStorage.removeItem('wallet_tasks_v3');
@@ -1539,23 +1558,19 @@
                 setIsSelectionMode(false);
             };
 
-            // Custom wrapper for saving settings to handle history
             const handleSaveSettings = (newSettings) => {
                 setSettings(newSettings);
-                
-                // Collect images from all view configs to update history
                 const imagesToAdd = [
                     newSettings.viewConfigs.active.backgroundImage,
                     newSettings.viewConfigs.completed.backgroundImage,
                     newSettings.viewConfigs.deleted.backgroundImage
-                ].filter(Boolean); // Remove empty strings
+                ].filter(Boolean);
 
                 if (imagesToAdd.length > 0) {
                     setBgHistory(prev => {
-                        // Merge current history with new images, removing duplicates
                         const combined = [...imagesToAdd, ...prev];
                         const unique = [...new Set(combined)];
-                        return unique.slice(0, 20); // Request 6: increased to 20
+                        return unique.slice(0, 20);
                     });
                 }
             };
@@ -1566,34 +1581,27 @@
                 }
             };
 
-            // [CR-IMPL] Direct add to history handler
             const handleAddToHistory = (newBg) => {
                 if (!newBg) return;
                 setBgHistory(prev => {
-                    const filtered = prev.filter(bg => bg !== newBg); // Remove duplicate if exists
+                    const filtered = prev.filter(bg => bg !== newBg);
                     const updated = [newBg, ...filtered];
-                    return updated.slice(0, 20); // Keep max 20
+                    return updated.slice(0, 20);
                 });
             };
 
-            // New: Quick Switch BG Logic
             const handleQuickBgChange = () => {
-                const history = [''].concat(bgHistory); // '' represents no bg
+                const history = [''].concat(bgHistory);
                 const currentBg = settings.viewConfigs[view].backgroundImage || '';
                 let currentIndex = history.indexOf(currentBg);
-                
-                // If current BG is not in history (e.g. freshly uploaded), start from 0
                 if (currentIndex === -1) currentIndex = 0;
-
                 const nextIndex = (currentIndex + 1) % history.length;
                 const nextBg = history[nextIndex];
 
-                // [CR-IMPL] Unified Writing Logic: Update global settings state
                 setSettings(prev => ({
                     ...prev,
                     viewConfigs: {
                         ...prev.viewConfigs,
-                        // [CR-IMPL] Independent Tab Setting: Apply change only to current view
                         [view]: {
                             ...prev.viewConfigs[view],
                             backgroundImage: nextBg
@@ -1602,19 +1610,29 @@
                 }));
             };
 
-            // Get current view config based on 'view' state
             const currentConfig = settings.viewConfigs[view] || defaultViewConfig;
 
             return (
                 <>
-                    {/* 1. Fixed Background Layer - Updated: Fixed position, Top offset to avoid header overlap */}
+                    {/* [CR-IMPL] 新增: 儲存空間不足提示組件 */}
+                    {isStorageFull && (
+                        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] w-[90%] max-w-sm animate-bounce-sm">
+                            <div className="bg-red-600/90 backdrop-blur-md text-white px-4 py-3 rounded-2xl shadow-2xl border border-white/20 flex items-center gap-3">
+                                <AlertTriangle size={20} className="flex-shrink-0" />
+                                <span className="text-xs font-bold leading-tight">{storageAlert}</span>
+                                <button onClick={() => setIsStorageFull(false)} className="p-1 hover:bg-white/20 rounded-lg">
+                                    <X size={14} />
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
                     {currentConfig.backgroundImage && (
                         <div 
                             className="fixed inset-0 z-0 mx-auto max-w-md transition-all duration-500"
                             style={{
-                                top: '190px', // Approximate header height to prevent covering
+                                top: '190px',
                                 backgroundImage: `url(${currentConfig.backgroundImage})`,
-                                // [CR-IMPL] Unified to 'Original' setting (auto size, top-center)
                                 backgroundSize: 'auto', 
                                 backgroundPosition: 'center top',
                                 backgroundRepeat: 'no-repeat',
@@ -1622,7 +1640,6 @@
                         />
                     )}
 
-                    {/* 2. Main Content Container */}
                     <div 
                         className="max-w-md mx-auto min-h-screen relative shadow-2xl sm:border-x border-slate-200 transition-all duration-500 z-10"
                         style={{
@@ -1634,12 +1651,11 @@
                             onTitleChange={(t) => setSettings(s => ({...s, appTitle: t}))}
                             onOpenSettings={() => setShowSettings(true)}
                             onOpenMenu={() => {
-                                // [CR-IMPL] 修改: 更新選單提示文字，新增重設選項 (4)
                                 const action = prompt("1.完整備份(含設定) 2.匯入還原 3.清空票券 4.徹底重設(測試空間用)");
                                 if(action==='1') handleBackup(); 
                                 if(action==='2') handleImport(); 
                                 if(action==='3' && confirm("確定清空所有票券？")) setTasks([]);
-                                if(action==='4') handleFullReset(); // 執行重設
+                                if(action==='4') handleFullReset();
                             }}
                             sortType={sortType} setSortType={setSortType}
                             searchQuery={searchQuery} setSearchQuery={setSearchQuery}
@@ -1649,7 +1665,6 @@
                             isCompact={isCompact}
                             setIsCompact={setIsCompact}
                             hasBg={!!currentConfig.backgroundImage}
-                            // Pass props for new Header features
                             view={view} setView={setView}
                             activeTag={activeTag} setActiveTag={setActiveTag}
                             allTags={allTags}
@@ -1657,9 +1672,6 @@
                             headerBackgroundImage={currentConfig.headerBackgroundImage}
                         />
                         
-                        {/* Removed TagTabs Component */}
-                        
-                        {/* Ticket List Container - Removed white background/padding bottom */}
                         <div className="pt-2 min-h-[50vh] transition-colors">
                             {filteredTasks.length > 0 ? (
                                 filteredTasks.map(ticket => (
@@ -1670,9 +1682,8 @@
                                         isDuplicate={duplicateSerials.has(ticket.serial)}
                                         opacity={currentConfig.cardOpacity}
                                         cardBgColor={currentConfig.cardBgColor}
-                                        cardBorderColor={currentConfig.cardBorderColor} // Pass prop
+                                        cardBorderColor={currentConfig.cardBorderColor}
                                         isCompact={isCompact}
-                                        // Pass new compact props
                                         compactHeight={currentConfig.compactHeight}
                                         compactShowImage={currentConfig.compactShowImage}
                                     />
@@ -1685,7 +1696,6 @@
                             )}
                         </div>
 
-                        {/* FAB / Selection Actions */}
                         {isSelectionMode ? (
                             <div className="fixed bottom-10 left-1/2 -translate-x-1/2 flex gap-3 z-40 animate-slide-up">
                                 {selectedIds.size > 0 && (
@@ -1712,8 +1722,6 @@
                             </button>
                         )}
 
-                        {/* Removed Bottom Navigation Bar */}
-
                         <AddTicketModal isOpen={showAddModal} onClose={() => setShowAddModal(false)} onAddBatch={handleAddBatch} allTags={allTags} />
                         <RedeemModal ticket={selectedTicket} onClose={() => setSelectedTicket(null)} onToggleComplete={handleToggleComplete} onDelete={handleDelete} onRestore={handleRestore} onUpdate={handleUpdate} allTags={allTags} />
                         <SettingsModal 
@@ -1722,7 +1730,6 @@
                             bgHistory={bgHistory}
                             onSave={handleSaveSettings}
                             onRemoveHistory={handleRemoveHistory}
-                            // [CR-IMPL] Pass handler
                             onAddToHistory={handleAddToHistory}
                         />
                         <TagManagerModal isOpen={showTagManager} onClose={() => setShowTagManager(false)} tags={allTags} onDeleteTag={handleDeleteTag} />
