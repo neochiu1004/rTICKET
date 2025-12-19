@@ -1501,6 +1501,17 @@
                     r.readAsText(e.target.files[0]);
                 }; input.click();
             };
+
+            // [CR-IMPL] 新增: 系統徹底重設函式，用於清空所有儲存空間
+            const handleFullReset = () => {
+                if (window.confirm("⚠️ 注意：這將刪除所有票券、設定與背景紀錄，且無法復原。確定要徹底重設嗎？")) {
+                    localStorage.removeItem('wallet_tasks_v3');
+                    localStorage.removeItem('wallet_settings_v3');
+                    localStorage.removeItem('wallet_bg_history_v3');
+                    localStorage.removeItem('last_notify_date_v3');
+                    window.location.reload();
+                }
+            };
             
             const handleSelect = (id) => {
                 const newSet = new Set(selectedIds);
@@ -1623,8 +1634,12 @@
                             onTitleChange={(t) => setSettings(s => ({...s, appTitle: t}))}
                             onOpenSettings={() => setShowSettings(true)}
                             onOpenMenu={() => {
-                                const action = prompt("1.完整備份(含設定) 2.匯入還原 3.清空資料");
-                                if(action==='1') handleBackup(); if(action==='2') handleImport(); if(action==='3' && confirm("確定清空？")) setTasks([]);
+                                // [CR-IMPL] 修改: 更新選單提示文字，新增重設選項 (4)
+                                const action = prompt("1.完整備份(含設定) 2.匯入還原 3.清空票券 4.徹底重設(測試空間用)");
+                                if(action==='1') handleBackup(); 
+                                if(action==='2') handleImport(); 
+                                if(action==='3' && confirm("確定清空所有票券？")) setTasks([]);
+                                if(action==='4') handleFullReset(); // 執行重設
                             }}
                             sortType={sortType} setSortType={setSortType}
                             searchQuery={searchQuery} setSearchQuery={setSearchQuery}
