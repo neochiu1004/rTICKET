@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>票券管家 Fresh (Wallet UI)</title>
+    <title>票券管家 Pro (Wallet UI)</title>
 
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -113,7 +113,7 @@
             ImagePlus, Heart, HeartHandshake, Eye, EyeOff, Globe, BookOpen, Star, History, MousePointerClick, Layers,
             CalendarX2, CopyPlus, Lightbulb, Loader2, QrCode, SlidersHorizontal, ArrowUpDown, Image, CheckCheck, SendHorizontal, XCircle, Droplets,
             MoveVertical, BoxSelect, Monitor, Palette, Rows, LayoutGrid, ChevronRight, ChevronDown as ChevronDownIcon,
-            PanelTop, PaintBucket, Maximize, Move, Eye as PreviewIcon, Info, MapPin
+            PanelTop, PaintBucket, Maximize, Move, Eye as PreviewIcon, Info, MapPin, DatabaseBackup, ArchiveRestore, Eraser, Settings2
         } from 'lucide-react';
 
         // --- 1. Core Logic (Helpers & DB) ---
@@ -299,14 +299,11 @@
                 const data = await response.json();
                 
                 if (data.ok) {
-                    console.log("TG Notification sent successfully");
                     return { success: true };
                 } else {
-                    console.error("TG API Error:", data);
                     return { success: false, error: data.description };
                 }
             } catch (error) {
-                console.error("TG Network Error:", error);
                 return { success: false, error: error.message };
             }
         };
@@ -383,6 +380,7 @@
             const [localSettings, setLocalSettings] = useState(JSON.parse(JSON.stringify(settings)));
             const [currentTab, setCurrentTab] = useState('active');
             const [testStatus, setTestStatus] = useState(null);
+            const [newKw, setNewKw] = useState('');
             const headerFileInputRef = useRef(null);
             const galleryInputRef = useRef(null);
 
@@ -390,6 +388,20 @@
 
             const handleGlobalChange = (key, value) => {
                 setLocalSettings(prev => ({ ...prev, [key]: value }));
+            };
+
+            const handleAddKw = () => {
+                if (!newKw.trim()) return;
+                const kws = localSettings.specificViewKeywords || [];
+                if (!kws.includes(newKw.trim())) {
+                    handleGlobalChange('specificViewKeywords', [...kws, newKw.trim()]);
+                }
+                setNewKw('');
+            };
+
+            const handleRemoveKw = (kw) => {
+                const kws = localSettings.specificViewKeywords || [];
+                handleGlobalChange('specificViewKeywords', kws.filter(k => k !== kw));
             };
 
             const handleViewConfigChange = (key, value) => {
@@ -400,7 +412,6 @@
                     currentView[key] = value;
                     
                     const imageUrl = currentView.backgroundImage;
-                    
                     if (!next.bgConfigMap) next.bgConfigMap = {};
                     
                     if (key === 'backgroundImage' && value) {
@@ -467,6 +478,23 @@
                             <div>
                                 <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 block">通知天數 (紅框顯示)</label>
                                 <input type="number" value={localSettings.notifyDays} onChange={e => handleGlobalChange('notifyDays', e.target.value)} className="w-full p-3 bg-slate-50 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-sky-400"/>
+                            </div>
+
+                            {/* [CR-IMPL] 新增特定畫面關鍵字設定 */}
+                            <div className="border-t border-slate-100 pt-4">
+                                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 block">特定畫面觸發關鍵字 (MOMO模式)</label>
+                                <div className="flex gap-2 mb-3">
+                                    <input value={newKw} onChange={e => setNewKw(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddKw()} placeholder="輸入關鍵字 (如: MOMO, 餐券)..." className="flex-1 p-2 bg-slate-50 rounded-lg text-sm outline-none border-none focus:ring-1 focus:ring-sky-400"/>
+                                    <button onClick={handleAddKw} className="px-4 bg-sky-500 text-white rounded-lg font-bold"><Plus size={18}/></button>
+                                </div>
+                                <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto no-scrollbar">
+                                    {(localSettings.specificViewKeywords || []).map(kw => (
+                                        <span key={kw} className="bg-slate-100 text-slate-600 px-2 py-1 rounded-md text-xs font-bold flex items-center gap-1">
+                                            {kw} <X size={10} className="cursor-pointer hover:text-red-500" onClick={() => handleRemoveKw(kw)}/>
+                                        </span>
+                                    ))}
+                                    {(!localSettings.specificViewKeywords || localSettings.specificViewKeywords.length === 0) && <span className="text-[10px] text-slate-300">預設：MOMO</span>}
+                                </div>
                             </div>
                             
                             <div className="border-t border-slate-100 pt-4">
@@ -691,12 +719,75 @@
             );
         };
 
+        // [CR-IMPL] 新增 DataActionsModal (取代原 Prompt 選單)
+        const DataActionsModal = ({ isOpen, onClose, onBackup, onImportClick, onReset }) => {
+            if (!isOpen) return null;
+            return (
+                <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-fade-in" onClick={onClose}>
+                    <div className="bg-white w-full max-w-xs rounded-3xl p-6 shadow-2xl space-y-4" onClick={e => e.stopPropagation()}>
+                        <h2 className="text-lg font-black text-slate-800 text-center mb-2">資料管理</h2>
+                        <button onClick={onBackup} className="w-full py-4 bg-sky-50 text-sky-600 rounded-2xl font-bold flex flex-col items-center gap-1 hover:bg-sky-100 transition-colors">
+                            <DatabaseBackup size={24} /> 匯出備份 (JSON)
+                        </button>
+                        <button onClick={onImportClick} className="w-full py-4 bg-emerald-50 text-emerald-600 rounded-2xl font-bold flex flex-col items-center gap-1 hover:bg-emerald-100 transition-colors">
+                            <ArchiveRestore size={24} /> 匯入還原
+                        </button>
+                        <button onClick={onReset} className="w-full py-4 bg-slate-50 text-slate-500 rounded-2xl font-bold flex flex-col items-center gap-1 hover:bg-red-50 hover:text-red-500 transition-colors">
+                            <Eraser size={24} /> 清空/重置
+                        </button>
+                        <button onClick={onClose} className="w-full py-3 text-slate-400 font-bold text-sm mt-2">取消</button>
+                    </div>
+                </div>
+            );
+        };
+
+        // [CR-IMPL] 新增 ImportConfirmModal (優化匯入確認)
+        const ImportConfirmModal = ({ isOpen, data, onConfirm, onCancel }) => {
+            if (!isOpen || !data) return null;
+            const [mode, setMode] = useState('append');
+            const [restoreSettings, setRestoreSettings] = useState(false);
+            const count = Array.isArray(data) ? data.length : (data.tasks || []).length;
+            const hasSettings = !!data.settings;
+
+            return (
+                <div className="fixed inset-0 bg-slate-900/60 z-[60] flex items-center justify-center p-6 backdrop-blur-md animate-fade-in" onClick={onCancel}>
+                    <div className="bg-white w-full max-w-sm rounded-[32px] p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+                        <div className="text-center mb-6">
+                            <div className="w-16 h-16 bg-sky-50 text-sky-500 rounded-full flex items-center justify-center mx-auto mb-3">
+                                <FileJson size={32}/>
+                            </div>
+                            <h2 className="text-xl font-black text-slate-800">準備匯入資料</h2>
+                            <p className="text-sm text-slate-400 font-bold mt-1">偵測到 {count} 筆票券資料</p>
+                        </div>
+                        <div className="space-y-4">
+                            <div className="flex bg-slate-100 p-1 rounded-2xl">
+                                <button onClick={() => setMode('append')} className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all ${mode === 'append' ? 'bg-white shadow text-sky-600' : 'text-slate-400 hover:text-slate-600'}`}>添加</button>
+                                <button onClick={() => setMode('overwrite')} className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all ${mode === 'overwrite' ? 'bg-white shadow text-red-500' : 'text-slate-400 hover:text-slate-600'}`}>覆蓋</button>
+                            </div>
+                            {hasSettings && (
+                                <label className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl cursor-pointer">
+                                    <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${restoreSettings ? 'bg-sky-500 border-sky-500' : 'border-slate-300 bg-white'}`}>
+                                        {restoreSettings && <Check size={14} className="text-white"/>}
+                                    </div>
+                                    <input type="checkbox" className="hidden" checked={restoreSettings} onChange={e => setRestoreSettings(e.target.checked)}/>
+                                    <div className="text-sm font-bold text-slate-700">還原設定 (標題、背景等)</div>
+                                </label>
+                            )}
+                        </div>
+                        <div className="flex gap-3 mt-8">
+                            <button onClick={onCancel} className="flex-1 py-3.5 bg-slate-100 text-slate-500 rounded-2xl font-bold">取消</button>
+                            <button onClick={() => onConfirm(mode, restoreSettings)} className="flex-1 py-3.5 bg-sky-500 text-white rounded-2xl font-bold shadow-lg shadow-sky-200 active:scale-95">確認匯入</button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
         const Header = ({ 
             appTitle, onTitleChange, onOpenMenu, onOpenSettings, 
             sortType, setSortType, setSearchQuery, searchQuery, 
             isSelectionMode, setIsSelectionMode, selectedCount, onSelectAll, 
-            isCompact, setIsCompact, hasBg, 
-            view, setView, activeTag, setActiveTag, allTags,
+            isCompact, setIsCompact, view, setView, activeTag, setActiveTag, allTags,
             onQuickBgChange, headerBackgroundImage 
         }) => (
             <div 
@@ -739,10 +830,10 @@
                             {isSelectionMode ? `已選 ${selectedCount}` : '選取'}
                         </button>
                         <button onClick={onOpenSettings} className="w-9 h-9 rounded-full bg-slate-50/50 border border-slate-100/50 flex items-center justify-center text-slate-500 hover:text-sky-600 hover:bg-white transition-all shadow-sm">
-                            <i className="fas fa-cog"></i>
+                            <Settings2 size={16}/>
                         </button>
                         <button onClick={onOpenMenu} className="w-9 h-9 rounded-full bg-slate-50/50 border border-slate-100/50 flex items-center justify-center text-slate-500 hover:text-sky-600 hover:bg-white transition-all shadow-sm">
-                            <i className="fas fa-ellipsis-v"></i>
+                            <MoreVertical size={16}/>
                         </button>
                     </div>
                 </div>
@@ -820,13 +911,10 @@
 
         const TicketCard = ({ ticket, onClick, notifyDays, isSelectionMode, isSelected, onSelect, isDuplicate, opacity = 0.95, cardBgColor = '#ffffff', cardBorderColor = '#e2e8f0', isCompact, compactHeight = 70, compactShowImage = false }) => {
             const isExpiring = !ticket.completed && ticket.expiry && checkIsExpiringSoon(ticket.expiry, notifyDays);
-            
             const isDuplicateWarning = isDuplicate && !ticket.completed && !ticket.isDeleted;
             const isExpiringWarning = isExpiring && !ticket.completed && !ticket.isDeleted;
-
             const { r, g, b } = hexToRgb(cardBgColor);
             let bgBase = `rgba(${r}, ${g}, ${b}, ${opacity})`;
-            
             let overlayClass = '';
             let dynamicBorderStyle = {};
 
@@ -838,229 +926,97 @@
                 overlayClass = 'hover:shadow-md border';
                 dynamicBorderStyle = { borderColor: cardBorderColor };
             }
-
             const duplicateClass = isDuplicateWarning ? 'border-red-500 ring-2 ring-red-100 shadow-red-200' : '';
 
             if (isCompact) {
                 return (
-                    <div 
-                        onClick={() => {
-                            if(isSelectionMode) onSelect(ticket.id);
-                            else onClick(ticket);
-                        }}
-                        style={{ backgroundColor: bgBase, height: `${compactHeight}px`, ...(!isSelected && !isExpiringWarning && !isDuplicateWarning ? dynamicBorderStyle : {}) }}
-                        className="backdrop-blur-sm mx-2 mb-1 px-2 rounded-lg shadow-sm flex items-center gap-2 active:scale-[0.98] transition-all cursor-pointer relative overflow-hidden group"
-                    >
+                    <div onClick={() => { if(isSelectionMode) onSelect(ticket.id); else onClick(ticket); }} style={{ backgroundColor: bgBase, height: `${compactHeight}px`, ...(!isSelected && !isExpiringWarning && !isDuplicateWarning ? dynamicBorderStyle : {}) }} className={`backdrop-blur-sm mx-2 mb-1 px-2 rounded-lg shadow-sm flex items-center gap-2 active:scale-[0.98] transition-all cursor-pointer relative overflow-hidden group ${overlayClass} ${duplicateClass}`}>
                         {isSelectionMode && (
                             <div className={`w-4 h-4 flex-shrink-0 rounded-full border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-sky-500 border-sky-500' : 'border-slate-300 bg-white'}`}>
                                 {isSelected && <Check size={10} className="text-white"/>}
                             </div>
                         )}
-                        
                         {compactShowImage && (
                             <div className="h-full aspect-square py-1 mr-1 flex-shrink-0">
-                                {ticket.image ? (
-                                    <img src={ticket.image} alt="icon" className={`w-full h-full object-cover rounded-md ${ticket.completed ? 'grayscale opacity-50' : ''}`} />
-                                ) : (
-                                    <div className="w-full h-full bg-slate-100 rounded-md flex items-center justify-center border border-slate-200">
-                                        <i className="fas fa-ticket-alt text-slate-300 text-xs"></i>
-                                    </div>
-                                )}
+                                {ticket.image ? <img src={ticket.image} className={`w-full h-full object-cover rounded-md ${ticket.completed ? 'grayscale opacity-50' : ''}`} /> : <div className="w-full h-full bg-slate-100 rounded-md flex items-center justify-center border border-slate-200"><i className="fas fa-ticket-alt text-slate-300 text-xs"></i></div>}
                             </div>
                         )}
-                        
                         <div className="flex-1 min-w-0 flex flex-col justify-center">
                             <div className="flex items-center gap-2">
-                                {isDuplicateWarning && (
-                                    <span className="text-[9px] bg-red-500 text-white px-1.5 py-0.5 rounded font-bold">重複</span>
-                                )}
-                                <h3 className={`font-bold text-slate-800 line-clamp-1 text-sm ${ticket.completed ? 'line-through text-slate-400' : ''}`}>
-                                    {ticket.productName}
-                                </h3>
+                                {isDuplicateWarning && <span className="text-[9px] bg-red-500 text-white px-1.5 py-0.5 rounded font-bold">重複</span>}
+                                <h3 className={`font-bold text-slate-800 line-clamp-1 text-sm ${ticket.completed ? 'line-through text-slate-400' : ''}`}>{ticket.productName}</h3>
                             </div>
                             <div className="flex items-center gap-2 mt-0.5">
                                 {isExpiringWarning && <span className="text-[9px] font-bold text-red-500 flex items-center gap-0.5"><AlertCircle size={9}/> 快到期</span>}
-                                <span className={`text-[10px] font-bold ${ticket.completed ? 'text-emerald-600' : 'text-emerald-500'}`}>
-                                    {ticket.completed ? `已用 ${formatTime(ticket.completedAt)}` : (ticket.expiry || '無期限')}
-                                </span>
+                                <span className={`text-[10px] font-bold ${ticket.completed ? 'text-emerald-600' : 'text-emerald-500'}`}>{ticket.completed ? `已用 ${formatTime(ticket.completedAt)}` : (ticket.expiry || '無期限')}</span>
                             </div>
                         </div>
-
-                        {!isSelectionMode && (
-                            <button className={`flex-shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-lg transition-all ${ticket.completed ? 'bg-slate-100 text-slate-500' : 'bg-emerald-100 text-emerald-600 hover:bg-emerald-500 hover:text-white'}`}>
-                                {ticket.completed ? '查看' : '兌換'}
-                            </button>
-                        )}
+                        {!isSelectionMode && <button className={`flex-shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-lg transition-all ${ticket.completed ? 'bg-slate-100 text-slate-500' : 'bg-emerald-100 text-emerald-600 hover:bg-emerald-500 hover:text-white'}`}>{ticket.completed ? '查看' : '兌換'}</button>}
                     </div>
                 );
             }
 
             return (
-                <div 
-                    onClick={() => {
-                        if(isSelectionMode) onSelect(ticket.id);
-                        else onClick(ticket);
-                    }}
-                    style={{ backgroundColor: bgBase, ...(!isSelected && !isExpiringWarning && !isDuplicateWarning ? dynamicBorderStyle : {}) }}
-                    className={`backdrop-blur-sm mx-4 mt-4 p-4 rounded-3xl shadow-sm flex gap-4 active:scale-[0.98] transition-all cursor-pointer relative overflow-hidden group ${overlayClass} ${duplicateClass}`}
-                >
-                    {isSelectionMode && (
-                        <div className={`absolute top-3 right-3 z-20 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-sky-500 border-sky-500' : 'border-slate-300 bg-white'}`}>
-                            {isSelected && <Check size={14} className="text-white"/>}
-                        </div>
-                    )}
-                    
-                    {isDuplicateWarning && (
-                        <div className="absolute top-0 left-0 bg-red-500 text-white text-[9px] px-2 py-0.5 rounded-br-lg z-20 font-bold">
-                            重複序號
-                        </div>
-                    )}
-
+                <div onClick={() => { if(isSelectionMode) onSelect(ticket.id); else onClick(ticket); }} style={{ backgroundColor: bgBase, ...(!isSelected && !isExpiringWarning && !isDuplicateWarning ? dynamicBorderStyle : {}) }} className={`backdrop-blur-sm mx-4 mt-4 p-4 rounded-3xl shadow-sm flex gap-4 active:scale-[0.98] transition-all cursor-pointer relative overflow-hidden group ${overlayClass} ${duplicateClass}`}>
+                    {isSelectionMode && <div className={`absolute top-3 right-3 z-20 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-sky-500 border-sky-500' : 'border-slate-300 bg-white'}`}>{isSelected && <Check size={14} className="text-white"/>}</div>}
+                    {isDuplicateWarning && <div className="absolute top-0 left-0 bg-red-500 text-white text-[9px] px-2 py-0.5 rounded-br-lg z-20 font-bold">重複序號</div>}
                     <div className="w-20 h-20 flex-shrink-0 rounded-2xl flex items-center justify-center overflow-hidden relative group-hover:scale-105 transition-transform">
-                        {ticket.image ? (
-                            <img src={ticket.image} alt="logo" className={`w-full h-full object-cover ${ticket.completed ? 'grayscale opacity-50' : ''}`} />
-                        ) : (
-                            <i className="fas fa-ticket-alt text-slate-300 text-2xl"></i>
-                        )}
-                        {ticket.images && ticket.images.length > 1 && (
-                            <div className="absolute bottom-0 right-0 bg-black/60 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-tl-lg">+{ticket.images.length-1}</div>
-                        )}
+                        {ticket.image ? <img src={ticket.image} className={`w-full h-full object-cover ${ticket.completed ? 'grayscale opacity-50' : ''}`} /> : <i className="fas fa-ticket-alt text-slate-300 text-2xl"></i>}
+                        {ticket.images && ticket.images.length > 1 && <div className="absolute bottom-0 right-0 bg-black/60 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-tl-lg">+{ticket.images.length-1}</div>}
                     </div>
-
                     <div className="flex-1 flex flex-col justify-between py-1 min-w-0">
                         <div>
                             <div className="flex justify-between items-start pr-6">
-                                <h3 className={`font-bold text-slate-800 line-clamp-1 text-[15px] ${ticket.completed ? 'line-through text-slate-400' : ''}`}>
-                                    {ticket.productName}
-                                </h3>
+                                <h3 className={`font-bold text-slate-800 line-clamp-1 text-[15px] ${ticket.completed ? 'line-through text-slate-400' : ''}`}>{ticket.productName}</h3>
                                 {ticket.completed && <span className="bg-slate-100 text-slate-500 text-[10px] px-2 py-0.5 rounded-full font-bold">已使用</span>}
                             </div>
                             {isExpiringWarning && <div className="text-[10px] font-bold text-red-500 mt-1 flex items-center gap-1 animate-pulse"><AlertCircle size={10}/> 快到期</div>}
-                            
                             <div className="flex gap-1.5 mt-2 overflow-x-auto no-scrollbar">
-                                {ticket.tags && ticket.tags.map(t => (
-                                    <span key={t} className="text-[10px] bg-sky-50 text-sky-600 px-2 py-0.5 rounded-md font-bold whitespace-nowrap">{t}</span>
-                                ))}
+                                {ticket.tags && ticket.tags.map(t => <span key={t} className="text-[10px] bg-sky-50 text-sky-600 px-2 py-0.5 rounded-md font-bold whitespace-nowrap">{t}</span>)}
                                 {!ticket.tags?.length && <span className="text-[10px] text-slate-300 font-bold">#</span>}
                             </div>
                         </div>
-                        
                         <div className="flex justify-between items-end mt-2">
-                            {ticket.completed && ticket.completedAt ? (
-                                <div className="text-[10px] font-bold text-emerald-600 flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded-lg">
-                                    <CheckCircle2 size={10}/> <span>核銷於 {formatDateTime(ticket.completedAt)}</span>
-                                </div>
-                            ) : (
-                                <div className={`text-xs font-bold flex items-center gap-1.5 ${isExpiring ? 'text-red-500' : 'text-emerald-500'}`}>
-                                    <Clock size={12}/> <span>{ticket.expiry || '無期限'}</span>
-                                </div>
-                            )}
-
-                            {!isSelectionMode && (
-                                <button className={`text-sm font-bold px-5 py-2.5 rounded-2xl shadow-sm transition-all active:scale-95 ${ticket.completed ? 'bg-slate-100 text-slate-500' : 'bg-emerald-100 text-emerald-600 hover:bg-emerald-500 hover:text-white shadow-emerald-100'}`}>
-                                    {ticket.completed ? '查看' : '兌換'}
-                                </button>
-                            )}
+                            {ticket.completed && ticket.completedAt ? <div className="text-[10px] font-bold text-emerald-600 flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded-lg"><CheckCircle2 size={10}/> <span>核銷於 {formatDateTime(ticket.completedAt)}</span></div> : <div className={`text-xs font-bold flex items-center gap-1.5 ${isExpiring ? 'text-red-500' : 'text-emerald-500'}`}><Clock size={12}/> <span>{ticket.expiry || '無期限'}</span></div>}
+                            {!isSelectionMode && <button className={`text-sm font-bold px-5 py-2.5 rounded-2xl shadow-sm transition-all active:scale-95 ${ticket.completed ? 'bg-slate-100 text-slate-500' : 'bg-emerald-100 text-emerald-600 hover:bg-emerald-500 hover:text-white shadow-emerald-100'}`}>{ticket.completed ? '查看' : '兌換'}</button>}
                         </div>
                     </div>
-                    
                     <div className="ticket-rip-l" style={{backgroundColor: 'transparent', boxShadow: 'none', borderLeft: '6px solid transparent'}}></div> 
                 </div>
             );
         };
 
-        // [CR-IMPL] 重構: 高度優化且手機易讀的 MOMO 模擬模板 (全螢幕、緊湊排版)
         const MomoTemplate = ({ ticket }) => {
             return (
                 <div className="w-full h-full flex flex-col bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-2xl animate-fade-in text-left">
-                    {/* 1. Header (桃紅色頂部 - 更緊湊) */}
                     <div className="bg-momo px-4 py-2.5 flex justify-between items-center text-white shrink-0">
-                        <div className="flex items-center gap-2">
-                            <img 
-                                alt="momo" 
-                                src="https://www.momoshop.com.tw/writeOff/resources/images/momologo.png" 
-                                className="h-4 w-auto brightness-0 invert"
-                            />
-                            <span className="text-[11px] font-black tracking-widest opacity-90">電子票券明細</span>
-                        </div>
+                        <div className="flex items-center gap-2"><img alt="momo" src="https://www.momoshop.com.tw/writeOff/resources/images/momologo.png" className="h-4 w-auto brightness-0 invert"/><span className="text-[11px] font-black tracking-widest opacity-90">電子票券明細</span></div>
                         <Info size={14} className="opacity-60" />
                     </div>
-
                     <div className="flex-1 overflow-y-auto no-scrollbar">
-                        {/* 2. 商品內容區 (手機優化佈局) */}
                         <div className="p-3 space-y-3">
                             <div className="flex gap-3">
-                                {/* 商品圖片 - 縮小且比例固定 */}
-                                <div className="w-20 h-20 shrink-0 border border-slate-100 rounded-lg overflow-hidden bg-slate-50 flex items-center justify-center">
-                                    {ticket.image ? (
-                                        <img src={ticket.image} className="w-full h-full object-cover" />
-                                    ) : (
-                                        <ImageIcon className="text-slate-200" size={24} />
-                                    )}
-                                </div>
-                                {/* 商品資訊 */}
-                                <div className="flex-1 min-w-0 flex flex-col justify-center">
-                                    <h2 className="text-[15px] font-black text-slate-800 leading-tight line-clamp-2">
-                                        {ticket.productName}
-                                    </h2>
-                                    <div className="mt-1 flex items-baseline gap-2">
-                                        <span className="text-[11px] font-bold text-slate-400">促銷價:</span>
-                                        <span className="text-lg font-black text-momo-price font-serif">35</span>
-                                    </div>
-                                </div>
+                                <div className="w-20 h-20 shrink-0 border border-slate-100 rounded-lg overflow-hidden bg-slate-50 flex items-center justify-center">{ticket.image ? <img src={ticket.image} className="w-full h-full object-cover" /> : <ImageIcon className="text-slate-200" size={24} />}</div>
+                                <div className="flex-1 min-w-0 flex flex-col justify-center"><h2 className="text-[15px] font-black text-slate-800 leading-tight line-clamp-2">{ticket.productName}</h2><div className="mt-1 flex items-baseline gap-2"><span className="text-[11px] font-bold text-slate-400">促銷價:</span><span className="text-lg font-black text-momo-price font-serif">35</span></div></div>
                             </div>
-
-                            {/* 分隔線與標記 */}
-                            <div className="relative border-t border-dashed border-slate-200 my-1">
-                                <div className="absolute -left-5 -top-1.5 w-3 h-3 bg-white rounded-full border border-slate-100"></div>
-                                <div className="absolute -right-5 -top-1.5 w-3 h-3 bg-white rounded-full border border-slate-100"></div>
-                            </div>
-
-                            {/* 3. 核心核銷區 (加大條碼感、緊湊) */}
+                            <div className="relative border-t border-dashed border-slate-200 my-1"><div className="absolute -left-5 -top-1.5 w-3 h-3 bg-white rounded-full border border-slate-100"></div><div className="absolute -right-5 -top-1.5 w-3 h-3 bg-white rounded-full border border-slate-100"></div></div>
                             <div className="bg-slate-50/50 rounded-xl p-3 flex flex-col items-center gap-3">
-                                <div className="w-full px-2">
-                                    <BarcodeCanvas text={ticket.serial} />
-                                </div>
-                                <div className="p-1.5 bg-white border border-slate-100 rounded-lg shadow-sm">
-                                    <QRCodeCanvas text={ticket.serial} size={110} />
-                                </div>
-                                <div className="text-center">
-                                    <p className="text-[10px] font-bold text-slate-400 mb-0.5">電子券號</p>
-                                    <p className="text-[13px] font-mono font-black text-slate-700 tracking-wider break-all px-4">
-                                        {ticket.serial}
-                                    </p>
-                                </div>
+                                <div className="w-full px-2"><BarcodeCanvas text={ticket.serial} /></div>
+                                <div className="p-1.5 bg-white border border-slate-100 rounded-lg shadow-sm"><QRCodeCanvas text={ticket.serial} size={110} /></div>
+                                <div className="text-center"><p className="text-[10px] font-bold text-slate-400 mb-0.5">電子券號</p><p className="text-[13px] font-mono font-black text-slate-700 tracking-wider break-all px-4">{ticket.serial}</p></div>
                             </div>
-
-                            {/* 4. 詳細資訊區 (極簡化) */}
                             <div className="space-y-1.5 px-1">
-                                <div className="flex justify-between items-center text-xs">
-                                    <span className="font-bold text-slate-400 flex items-center gap-1">
-                                        <Clock size={12}/> 兌換期限
-                                    </span>
-                                    <span className="font-black text-momo tracking-tight">
-                                        {ticket.expiry || '無效期限制'}
-                                    </span>
-                                </div>
-                                <div className="pt-2 text-[10px] text-slate-400 leading-tight border-t border-slate-100 italic">
-                                    ● 本券限兌換一次，結帳前請出示此畫面。不接受手抄或口說序號。
-                                </div>
+                                <div className="flex justify-between items-center text-xs"><span className="font-bold text-slate-400 flex items-center gap-1"><Clock size={12}/> 兌換期限</span><span className="font-black text-momo tracking-tight">{ticket.expiry || '無效期限制'}</span></div>
+                                <div className="pt-2 text-[10px] text-slate-400 leading-tight border-t border-slate-100 italic">● 本券限兌換一次，結帳前請出示此畫面。不接受手抄或口說序號。</div>
                             </div>
                         </div>
                     </div>
-
-                    {/* 5. Footer (極窄) */}
-                    <div className="px-4 py-2 bg-slate-50 border-t border-slate-100 shrink-0 flex justify-between items-center">
-                         <span className="text-[9px] font-bold text-slate-400">Copyright © momo.com Inc.</span>
-                         <div className="flex items-center gap-1 opacity-40">
-                             <img src="https://www.momoshop.com.tw/writeOff/resources/images/footerMOMO.png" className="h-4 w-auto" />
-                         </div>
-                    </div>
+                    <div className="px-4 py-2 bg-slate-50 border-t border-slate-100 shrink-0 flex justify-between items-center"><span className="text-[9px] font-bold text-slate-400">Copyright © momo.com Inc.</span><div className="flex items-center gap-1 opacity-40"><img src="https://www.momoshop.com.tw/writeOff/resources/images/footerMOMO.png" className="h-4 w-auto" /></div></div>
                 </div>
             );
         };
 
-        const RedeemModal = ({ ticket, onClose, onToggleComplete, onDelete, onRestore, onUpdate, allTags }) => {
+        const RedeemModal = ({ ticket, onClose, onToggleComplete, onDelete, onRestore, onUpdate, allTags, specificViewKeywords }) => {
             if (!ticket) return null;
             const [isEditing, setIsEditing] = useState(false);
             const [editName, setEditName] = useState(ticket.productName);
@@ -1068,18 +1024,20 @@
             const [editTags, setEditTags] = useState(ticket.tags || []);
             const [editImage, setEditImage] = useState(ticket.image || '');
             
-            const isMomoTicket = useMemo(() => ticket.tags?.some(t => t.toUpperCase() === 'MOMO'), [ticket.tags]);
-            const [viewMode, setViewMode] = useState(isMomoTicket ? 'momo' : (ticket.image && !ticket.serial ? 'image' : 'standard'));
-            
+            // [CR-IMPL] 更新判斷邏輯：根據設定的關鍵字觸發 MOMO 模式
+            const isSpecificView = useMemo(() => {
+                const keywords = (specificViewKeywords && specificViewKeywords.length > 0) ? specificViewKeywords : ['MOMO'];
+                const searchTarget = (ticket.productName + (ticket.tags || []).join('')).toUpperCase();
+                return keywords.some(kw => searchTarget.includes(kw.toUpperCase()));
+            }, [ticket, specificViewKeywords]);
+
+            const [viewMode, setViewMode] = useState(isSpecificView ? 'momo' : (ticket.image && !ticket.serial ? 'image' : 'standard'));
             const [showFullScreen, setShowFullScreen] = useState(false);
 
             const handleSave = () => {
                 onUpdate({
-                    ...ticket,
-                    productName: editName,
-                    expiry: editExpiry.replace(/-/g, '/'),
-                    tags: editTags, 
-                    image: editImage,
+                    ...ticket, productName: editName, expiry: editExpiry.replace(/-/g, '/'),
+                    tags: editTags, image: editImage,
                     images: editImage ? (ticket.images && ticket.images.includes(editImage) ? ticket.images : [editImage, ...(ticket.images || [])]) : ticket.images
                 });
                 setIsEditing(false);
@@ -1088,129 +1046,68 @@
             const handleImageChange = async (e) => {
                 const file = e.target.files[0];
                 if(file) {
-                    try {
-                        const base64 = await compressImage(file);
-                        setEditImage(base64);
-                    } catch(err) {
-                        alert("處理圖片時發生錯誤：" + err.message);
-                    }
+                    try { const base64 = await compressImage(file); setEditImage(base64); } catch(err) { alert("處理圖片時發生錯誤：" + err.message); }
                 }
             };
 
             const hasImage = !!ticket.image;
-            const hasSerial = !!ticket.serial;
-            
-            // [CR-IMPL] MOMO 模式下的特例 UI 處理：隱藏切換鈕與外部品名
             const isMomoMode = viewMode === 'momo';
 
             return (
                 <>
                 <div className="fixed inset-0 bg-slate-900/70 z-50 flex items-center justify-center p-3 sm:p-4 animate-fade-in backdrop-blur-md" onClick={onClose}>
                     <div className={`bg-white w-full max-w-sm rounded-[28px] overflow-hidden relative shadow-2xl flex flex-col border border-white/20 transition-all ${isMomoMode ? 'h-[85vh] sm:h-auto' : 'max-h-[90vh]'}`} onClick={e => e.stopPropagation()}>
-                        
                         <div className="p-4 sm:p-5 flex flex-col h-full">
-                            {/* Header Section */}
                             <div className="text-center shrink-0">
                                 {isEditing ? (
                                     <input className="text-lg font-black text-center w-full border-b border-sky-200 pb-2 mb-2 text-slate-800 focus:outline-none" value={editName} onChange={e=>setEditName(e.target.value)} />
                                 ) : (
-                                    /* [需求修改] MOMO 模式隱藏外部品名 */
                                     !isMomoMode && <h3 className="text-base font-black text-slate-800 break-words leading-tight px-4 mb-2">{ticket.productName}</h3>
                                 )}
-                                
                                 {isEditing && (
                                     <div className="mt-2 text-left space-y-3 bg-slate-50 p-4 rounded-2xl">
-                                        <div>
-                                            <label className="text-[10px] font-bold text-slate-400 uppercase">封面</label>
-                                            <div className="flex items-center gap-3 mt-1">
-                                                {editImage ? <img src={editImage} className="w-12 h-12 object-cover rounded-lg border border-slate-200"/> : <div className="w-12 h-12 bg-white border border-dashed border-slate-300 rounded-lg flex items-center justify-center"><ImageIcon size={16} className="text-slate-300"/></div>}
-                                                <label className="px-3 py-1 bg-sky-100 text-sky-600 text-[10px] font-bold rounded-md cursor-pointer">
-                                                    上傳 <input type="file" accept="image/*" onChange={handleImageChange} className="hidden"/>
-                                                </label>
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <label className="text-[10px] font-bold text-slate-400 uppercase">標籤</label>
-                                            <TagSelectInput allTags={allTags} selectedTags={editTags} onTagsChange={setEditTags} />
-                                        </div>
+                                        <div><label className="text-[10px] font-bold text-slate-400 uppercase">封面</label><div className="flex items-center gap-3 mt-1">{editImage ? <img src={editImage} className="w-12 h-12 object-cover rounded-lg border border-slate-200"/> : <div className="w-12 h-12 bg-white border border-dashed border-slate-300 rounded-lg flex items-center justify-center"><ImageIcon size={16} className="text-slate-300"/></div>}<label className="px-3 py-1 bg-sky-100 text-sky-600 text-[10px] font-bold rounded-md cursor-pointer">上傳 <input type="file" accept="image/*" onChange={handleImageChange} className="hidden"/></label></div></div>
+                                        <div><label className="text-[10px] font-bold text-slate-400 uppercase">標籤</label><TagSelectInput allTags={allTags} selectedTags={editTags} onTagsChange={setEditTags} /></div>
                                     </div>
                                 )}
                             </div>
-
-                            {/* Main Content Area */}
                             {!isEditing && (
                                 <div className="flex-1 flex flex-col min-h-0">
-                                    {/* [需求修改] MOMO 模式隱藏切換按鈕 */}
                                     {!isMomoMode && (
                                         <div className="flex justify-center shrink-0">
                                             <div className="flex bg-slate-100 p-1 rounded-xl mb-3">
                                                 <button onClick={()=>setViewMode('standard')} className={`px-4 py-1.5 rounded-lg text-[10px] font-bold transition-all ${viewMode === 'standard' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-400'}`}>條碼</button>
                                                 {hasImage && <button onClick={()=>setViewMode('image')} className={`px-4 py-1.5 rounded-lg text-[10px] font-bold transition-all ${viewMode === 'image' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-400'}`}>原圖</button>}
-                                                {isMomoTicket && <button onClick={()=>setViewMode('momo')} className={`px-4 py-1.5 rounded-lg text-[10px] font-bold transition-all ${viewMode === 'momo' ? 'bg-momo text-white shadow-sm' : 'text-momo'}`}>MOMO</button>}
+                                                {isSpecificView && <button onClick={()=>setViewMode('momo')} className={`px-4 py-1.5 rounded-lg text-[10px] font-bold transition-all ${viewMode === 'momo' ? 'bg-momo text-white shadow-sm' : 'text-momo'}`}>專屬</button>}
                                             </div>
                                         </div>
                                     )}
-
                                     <div className="flex-1 min-h-0">
                                         {viewMode === 'image' ? (
                                             <div className="h-full flex flex-col items-center gap-3">
-                                                <div className="relative group w-full flex-1 min-h-0 flex items-center justify-center cursor-zoom-in" onClick={() => setShowFullScreen(true)}>
-                                                    <img src={ticket.image} className="max-h-full w-auto rounded-xl shadow-md border border-slate-100" />
-                                                </div>
-                                                {hasSerial && (
-                                                    <div className="w-full space-y-2 shrink-0">
-                                                        <div className="bg-white p-2 rounded-xl border border-slate-100"><BarcodeCanvas text={ticket.serial} /></div>
-                                                        <div className="flex justify-center p-2 bg-white rounded-xl border border-slate-100 shrink-0"><QRCodeCanvas text={ticket.serial} size={100} /></div>
-                                                    </div>
-                                                )}
+                                                <div className="relative group w-full flex-1 min-h-0 flex items-center justify-center cursor-zoom-in" onClick={() => setShowFullScreen(true)}><img src={ticket.image} className="max-h-full w-auto rounded-xl shadow-md border border-slate-100" /></div>
+                                                {ticket.serial && (<div className="w-full space-y-2 shrink-0"><div className="bg-white p-2 rounded-xl border border-slate-100"><BarcodeCanvas text={ticket.serial} /></div><div className="flex justify-center p-2 bg-white rounded-xl border border-slate-100 shrink-0"><QRCodeCanvas text={ticket.serial} size={100} /></div></div>)}
                                             </div>
                                         ) : isMomoMode ? (
-                                            /* [需求修改] MOMO 模板現已為全版 Flex 結構，佔滿剩餘空間 */
-                                            <div className="h-full py-1">
-                                                <MomoTemplate ticket={ticket} />
-                                            </div>
+                                            <div className="h-full py-1"><MomoTemplate ticket={ticket} /></div>
                                         ) : (
                                             <div className="h-full flex flex-col items-center justify-center gap-5 py-4">
                                                 {ticket.serial && <div className="w-full bg-white p-3 rounded-xl border border-slate-100 shadow-sm"><BarcodeCanvas text={ticket.serial} /></div>}
-                                                <div className="p-4 bg-white rounded-[32px] shadow-sm border border-slate-100">
-                                                    {ticket.serial ? <QRCodeCanvas text={ticket.serial} size={180} /> : <div className="w-40 h-40 flex items-center justify-center text-slate-200 border-2 border-dashed rounded-2xl font-bold">無序號</div>}
-                                                </div>
-                                                <div className="text-center">
-                                                    <span className="text-[11px] font-bold text-slate-400 block mb-1">電子券號</span>
-                                                    <span className="font-mono text-lg font-black text-slate-600 bg-slate-50 px-4 py-1 rounded-full">{ticket.serial || 'N/A'}</span>
-                                                </div>
+                                                <div className="p-4 bg-white rounded-[32px] shadow-sm border border-slate-100">{ticket.serial ? <QRCodeCanvas text={ticket.serial} size={180} /> : <div className="w-40 h-40 flex items-center justify-center text-slate-200 border-2 border-dashed rounded-2xl font-bold">無序號</div>}</div>
+                                                <div className="text-center"><span className="text-[11px] font-bold text-slate-400 block mb-1">電子券號</span><span className="font-mono text-lg font-black text-slate-600 bg-slate-50 px-4 py-1 rounded-full">{ticket.serial || 'N/A'}</span></div>
                                             </div>
                                         )}
                                     </div>
                                 </div>
                             )}
-
-                            {/* Action Buttons - 確保底部緊湊排列，不需滑動 */}
                             <div className="mt-4 shrink-0 flex flex-col gap-2">
                                 {isEditing ? (
-                                    <div className="flex gap-2">
-                                        <button onClick={()=>setIsEditing(false)} className="flex-1 py-3 bg-slate-100 text-slate-500 rounded-xl font-bold text-sm">取消</button>
-                                        <button onClick={handleSave} className="flex-1 py-3 bg-sky-500 text-white rounded-xl font-bold text-sm shadow-lg shadow-sky-100">儲存變更</button>
-                                    </div>
+                                    <div className="flex gap-2"><button onClick={()=>setIsEditing(false)} className="flex-1 py-3 bg-slate-100 text-slate-500 rounded-xl font-bold text-sm">取消</button><button onClick={handleSave} className="flex-1 py-3 bg-sky-500 text-white rounded-xl font-bold text-sm shadow-lg shadow-sky-100">儲存變更</button></div>
                                 ) : (
                                     <>
-                                        {!ticket.isDeleted && (
-                                            <button 
-                                                onClick={() => { 
-                                                    if(ticket.completed) { onToggleComplete(ticket); onClose(); }
-                                                    else if(window.confirm("確定核銷？")) { onToggleComplete(ticket); onClose(); }
-                                                }} 
-                                                className="w-full py-4 text-base font-black rounded-2xl shadow-xl flex items-center justify-center gap-2 text-white bg-emerald-500 hover:bg-emerald-600 transition-all active:scale-95"
-                                            >
-                                                {ticket.completed ? <><RotateCcw size={20}/> 標記未用</> : <><CheckCircle2 size={20}/> 立即核銷</>}
-                                            </button>
-                                        )}
+                                        {!ticket.isDeleted && <button onClick={() => { if(ticket.completed) { onToggleComplete(ticket); onClose(); } else if(window.confirm("確定核銷？")) { onToggleComplete(ticket); onClose(); } }} className="w-full py-4 text-base font-black rounded-2xl shadow-xl flex items-center justify-center gap-2 text-white bg-emerald-500 hover:bg-emerald-600 transition-all active:scale-95">{ticket.completed ? <><RotateCcw size={20}/> 標記未用</> : <><CheckCircle2 size={20}/> 立即核銷</>}</button>}
                                         <div className="flex gap-2 h-11">
-                                            {ticket.isDeleted ? (
-                                                <button onClick={() => { onRestore(ticket); onClose(); }} className="flex-1 bg-emerald-50 text-emerald-600 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5"><RefreshCcw size={14}/> 還原</button>
-                                            ) : (
-                                                <button onClick={() => setIsEditing(true)} className="flex-1 bg-slate-50 text-slate-500 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 border border-slate-100"><Pencil size={14}/> 編輯</button>
-                                            )}
+                                            {ticket.isDeleted ? <button onClick={() => { onRestore(ticket); onClose(); }} className="flex-1 bg-emerald-50 text-emerald-600 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5"><RefreshCcw size={14}/> 還原</button> : <button onClick={() => setIsEditing(true)} className="flex-1 bg-slate-50 text-slate-500 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 border border-slate-100"><Pencil size={14}/> 編輯</button>}
                                             <button onClick={() => { onDelete(ticket.id); onClose(); }} className="flex-1 bg-red-50 text-red-500 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5"><Trash2 size={14}/> 刪除</button>
                                             <button onClick={onClose} className="w-11 bg-slate-100 text-slate-500 rounded-xl flex items-center justify-center"><X size={18}/></button>
                                         </div>
@@ -1220,13 +1117,7 @@
                         </div>
                     </div>
                 </div>
-                
-                {showFullScreen && ticket.image && (
-                    <div className="fixed inset-0 z-[60] bg-black flex items-center justify-center p-2 fullscreen-overlay" onClick={() => setShowFullScreen(false)}>
-                        <img src={ticket.image} className="max-w-full max-h-full object-contain" />
-                        <button className="absolute top-4 right-4 w-10 h-10 bg-slate-900/60 text-white rounded-full flex items-center justify-center backdrop-blur-md border border-white/40"><X size={24}/></button>
-                    </div>
-                )}
+                {showFullScreen && ticket.image && <div className="fixed inset-0 z-[60] bg-black flex items-center justify-center p-2 fullscreen-overlay" onClick={() => setShowFullScreen(false)}><img src={ticket.image} className="max-w-full max-h-full object-contain" /><button className="absolute top-4 right-4 w-10 h-10 bg-slate-900/60 text-white rounded-full flex items-center justify-center backdrop-blur-md border border-white/40"><X size={24}/></button></div>}
                 </>
             );
         };
@@ -1245,74 +1136,45 @@
                 setLoading(true);
                 try {
                     const results = parseBatchTicketInfo(pasteVal);
-                    if (results.length === 0) {
-                        alert("未能解析出票券，請確認格式或轉為手動輸入。");
-                    } else {
-                        onAddBatch(results);
-                        onClose();
-                    }
+                    if (results.length === 0) alert("未能解析出票券。");
+                    else { onAddBatch(results); onClose(); }
                 } catch (e) { alert("處理失敗"); } finally { setLoading(false); }
             };
 
             const handleManualSubmit = () => {
                 if (!manualData.name) { alert("請輸入名稱"); return; }
-                const newTicket = {
-                    id: Date.now(), productName: manualData.name, serial: manualData.serial,
-                    expiry: manualData.expiry.replace(/-/g, '/'), note: manualData.note,
-                    images: images, image: images[0] || '', tags: manualTags, completed: false, isDeleted: false, createdAt: Date.now()
-                };
-                onAddBatch([newTicket]);
+                onAddBatch([{ id: Date.now(), productName: manualData.name, serial: manualData.serial, expiry: manualData.expiry.replace(/-/g, '/'), note: manualData.note, images: images, image: images[0] || '', tags: manualTags, completed: false, isDeleted: false, createdAt: Date.now() }]);
                 onClose();
             };
 
             const handleImageUpload = async (e) => {
                 const file = e.target.files[0];
                 if(file) {
-                    try {
-                        const base64 = await compressImage(file);
-                        setImages([base64]);
-                    } catch(err) {
-                        alert("處理圖片時發生錯誤：" + err.message);
-                    }
+                    try { const base64 = await compressImage(file); setImages([base64]); } catch(err) { alert("處理圖片時發生錯誤：" + err.message); }
                 }
             };
 
             return (
                 <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-end sm:items-center justify-center animate-fade-in backdrop-blur-sm" onClick={onClose}>
-                    <div className="bg-white w-full sm:w-[450px] sm:rounded-3xl rounded-t-[32px] p-6 shadow-2xl transform transition-transform duration-300 max-h-[90vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
-                        <div className="flex justify-between items-center mb-6">
-                            <h2 className="text-xl font-black text-slate-800">新增票券</h2>
-                            <button onClick={onClose} className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200"><X size={18}/></button>
-                        </div>
-
+                    <div className="bg-white w-full sm:w-[450px] sm:rounded-3xl rounded-t-[32px] p-6 shadow-2xl max-h-[90vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
+                        <div className="flex justify-between items-center mb-6"><h2 className="text-xl font-black text-slate-800">新增票券</h2><button onClick={onClose} className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200"><X size={18}/></button></div>
                         <div className="flex bg-slate-100 p-1.5 rounded-2xl mb-6">
-                            <button onClick={()=>setActiveTab('smart')} className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab==='smart' ? 'bg-white shadow text-sky-600' : 'text-slate-400 hover:text-slate-600'}`}><Wand2 size={14} className="inline mr-1"/> 智慧貼上</button>
-                            <button onClick={()=>setActiveTab('manual')} className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab==='manual' ? 'bg-white shadow text-sky-600' : 'text-slate-400 hover:text-slate-600'}`}><Pencil size={14} className="inline mr-1"/> 手動輸入</button>
+                            <button onClick={()=>setActiveTab('smart')} className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab==='smart' ? 'bg-white shadow text-sky-600' : 'text-slate-400'}`}>智慧貼上</button>
+                            <button onClick={()=>setActiveTab('manual')} className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab==='manual' ? 'bg-white shadow text-sky-600' : 'text-slate-400'}`}>手動輸入</button>
                         </div>
-
                         {activeTab === 'smart' ? (
                             <div className="space-y-4">
-                                <textarea className="w-full h-40 p-4 bg-slate-50 rounded-2xl border border-transparent focus:bg-white focus:border-sky-300 outline-none resize-none text-sm font-medium text-slate-700 placeholder:text-slate-400" placeholder="貼上簡訊/Email..." value={pasteVal} onChange={e=>setPasteVal(e.target.value)}></textarea>
-                                <div className="text-xs font-bold text-slate-400 bg-slate-50 p-3 rounded-xl">💡 提示：支援包含「券號」、「序號」、「期限」等關鍵字的文字。</div>
-                                <button onClick={handleSmartSubmit} disabled={loading} className="w-full bg-sky-500 hover:bg-sky-600 text-white py-3.5 rounded-2xl font-bold shadow-lg shadow-sky-200 flex items-center justify-center gap-2 transition-transform active:scale-95">
-                                    {loading ? <Loader2 className="animate-spin"/> : <Wand2 size={18}/>} 立即解析
-                                </button>
+                                <textarea className="w-full h-40 p-4 bg-slate-50 rounded-2xl outline-none resize-none text-sm font-medium" placeholder="貼上簡訊/Email..." value={pasteVal} onChange={e=>setPasteVal(e.target.value)}></textarea>
+                                <button onClick={handleSmartSubmit} disabled={loading} className="w-full bg-sky-500 text-white py-3.5 rounded-2xl font-bold shadow-lg flex items-center justify-center gap-2">{loading ? <Loader2 className="animate-spin"/> : <Wand2 size={18}/>} 立即解析</button>
                             </div>
                         ) : (
                             <div className="space-y-3">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-20 h-20 bg-slate-50 border border-dashed border-slate-300 rounded-2xl flex items-center justify-center relative overflow-hidden group">
-                                        {images.length > 0 ? <img src={images[0]} className="w-full h-full object-cover"/> : <ImageIcon className="text-slate-300 group-hover:text-sky-400 transition-colors"/>}
-                                        <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" onChange={handleImageUpload}/>
-                                    </div>
-                                    <div className="flex-1 text-xs font-bold text-slate-400">點擊圖示上傳票券照片 (選填)</div>
-                                </div>
-                                <input className="w-full p-3.5 bg-slate-50 rounded-xl border-transparent focus:bg-white focus:ring-2 focus:ring-sky-200 font-bold text-slate-700 outline-none" placeholder="票券名稱 (必填)" value={manualData.name} onChange={e=>setManualData({...manualData, name: e.target.value})}/>
+                                <div className="flex items-center gap-3"><div className="w-20 h-20 bg-slate-50 border border-dashed border-slate-300 rounded-2xl flex items-center justify-center relative overflow-hidden">{images.length > 0 ? <img src={images[0]} className="w-full h-full object-cover"/> : <ImageIcon className="text-slate-300"/>}<input type="file" className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" onChange={handleImageUpload}/></div><div className="flex-1 text-xs font-bold text-slate-400">上傳票券照片 (選填)</div></div>
+                                <input className="w-full p-3.5 bg-slate-50 rounded-xl outline-none font-bold" placeholder="票券名稱 (必填)" value={manualData.name} onChange={e=>setManualData({...manualData, name: e.target.value})}/>
                                 <TagSelectInput allTags={allTags} selectedTags={manualTags} onTagsChange={setManualTags} />
-                                <input className="w-full p-3.5 bg-slate-50 rounded-xl border-transparent focus:bg-white focus:ring-2 focus:ring-sky-200 font-mono text-sm text-slate-700 outline-none" placeholder="序號/代碼 (選填)" value={manualData.serial} onChange={e=>setManualData({...manualData, serial: e.target.value})}/>
-                                <input type="date" className="w-full p-3.5 bg-slate-50 rounded-xl border-transparent focus:bg-white focus:ring-2 focus:ring-sky-200 text-slate-500 font-bold outline-none" value={manualData.expiry} onChange={e=>setManualData({...manualData, expiry: e.target.value})}/>
-                                <textarea className="w-full p-3.5 bg-slate-50 rounded-xl border-transparent focus:bg-white focus:ring-2 focus:ring-sky-200 h-24 resize-none text-sm font-medium outline-none" placeholder="備註..." value={manualData.note} onChange={e=>setManualData({...manualData, note: e.target.value})}></textarea>
-                                <button onClick={handleManualSubmit} className="w-full bg-sky-500 hover:bg-sky-600 text-white py-3.5 rounded-2xl font-bold shadow-lg shadow-sky-200 transition-transform active:scale-95">確認新增</button>
+                                <input className="w-full p-3.5 bg-slate-50 rounded-xl outline-none font-mono text-sm" placeholder="序號/代碼" value={manualData.serial} onChange={e=>setManualData({...manualData, serial: e.target.value})}/>
+                                <input type="date" className="w-full p-3.5 bg-slate-50 rounded-xl outline-none" value={manualData.expiry} onChange={e=>setManualData({...manualData, expiry: e.target.value})}/>
+                                <button onClick={handleManualSubmit} className="w-full bg-sky-500 text-white py-3.5 rounded-2xl font-bold shadow-lg">確認新增</button>
                             </div>
                         )}
                     </div>
@@ -1345,29 +1207,16 @@
         const BatchEditModal = ({ isOpen, onClose, selectedCount, onAddTag, allTags }) => {
              const [tagsToAdd, setTagsToAdd] = useState([]);
              if(!isOpen) return null;
-             
-             const handleConfirm = () => {
-                 onAddTag(tagsToAdd);
-                 onClose();
-             };
-             
+             const handleConfirm = () => { onAddTag(tagsToAdd); onClose(); };
              return (
                 <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-end sm:items-center justify-center animate-fade-in" onClick={onClose}>
                      <div className="bg-white w-full sm:w-[400px] sm:rounded-3xl rounded-t-[32px] p-6 shadow-2xl" onClick={e=>e.stopPropagation()}>
                         <h2 className="text-xl font-black mb-1 text-slate-800">批量編輯</h2>
                         <p className="text-xs font-bold text-slate-400 mb-4">已選取 {selectedCount} 張票券</p>
-                        
                         <div className="space-y-4">
-                            <div>
-                                <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">新增標籤 (將套用到所有選取項目)</label>
-                                <TagSelectInput allTags={allTags} selectedTags={tagsToAdd} onTagsChange={setTagsToAdd} />
-                            </div>
+                            <div><label className="text-xs font-bold text-slate-500 uppercase mb-2 block">新增標籤</label><TagSelectInput allTags={allTags} selectedTags={tagsToAdd} onTagsChange={setTagsToAdd} /></div>
                         </div>
-                        
-                        <div className="flex gap-3 mt-6">
-                            <button onClick={onClose} className="flex-1 py-3 bg-slate-100 font-bold rounded-2xl text-slate-500">取消</button>
-                            <button onClick={handleConfirm} className="flex-1 py-3 bg-sky-500 font-bold rounded-2xl text-white shadow-lg shadow-sky-200 hover:bg-sky-600 transition-colors">確認儲存</button>
-                        </div>
+                        <div className="flex gap-3 mt-6"><button onClick={onClose} className="flex-1 py-3 bg-slate-100 font-bold rounded-2xl text-slate-500">取消</button><button onClick={handleConfirm} className="flex-1 py-3 bg-sky-500 font-bold rounded-2xl text-white shadow-lg shadow-sky-200 hover:bg-sky-600 transition-colors">確認儲存</button></div>
                      </div>
                 </div>
              );
@@ -1386,8 +1235,14 @@
             const [isSelectionMode, setIsSelectionMode] = useState(false);
             const [selectedIds, setSelectedIds] = useState(new Set());
             const [showBatchModal, setShowBatchModal] = useState(false);
+            
+            // [CR-IMPL] 新增 Data Actions Modal 狀態
+            const [showDataModal, setShowDataModal] = useState(false);
+            const [importPendingData, setImportPendingData] = useState(null);
+
             const [settings, setSettings] = useState({ 
                 tgToken: '', tgChatId: '', notifyDays: 7, appTitle: '我的票夾',
+                specificViewKeywords: ['MOMO'], // [CR-IMPL] 預設關鍵字
                 bgConfigMap: {}, 
                 viewConfigs: {
                     active: { ...defaultViewConfig },
@@ -1398,14 +1253,12 @@
             const [bgHistory, setBgHistory] = useState([]);
             const [showSettings, setShowSettings] = useState(false);
             const [showTagManager, setShowTagManager] = useState(false);
-
             const [isDataLoaded, setIsDataLoaded] = useState(false);
 
             useEffect(() => {
                 const initData = async () => {
                     try {
                         await dbHelper.init();
-                        
                         const keys = ['wallet_tasks_v3', 'wallet_settings_v3', 'wallet_bg_history_v3'];
                         for (const key of keys) {
                             const localData = localStorage.getItem(key);
@@ -1415,7 +1268,6 @@
                                 localStorage.removeItem(key); 
                             }
                         }
-
                         const dbTasks = await dbHelper.getItem('wallet_tasks_v3');
                         const dbSettings = await dbHelper.getItem('wallet_settings_v3');
                         const dbBgHistory = await dbHelper.getItem('wallet_bg_history_v3');
@@ -1423,16 +1275,14 @@
                         if (dbTasks) setTasks(dbTasks);
                         if (dbSettings) {
                             const migrateConfig = (config) => ({
-                                ...defaultViewConfig,
-                                ...config,
+                                ...defaultViewConfig, ...config,
                                 bgSize: typeof config?.bgSize === 'number' ? config.bgSize : 100,
                                 bgPosY: typeof config?.bgPosY === 'number' ? config.bgPosY : 50
                             });
-
                             const mergedSettings = {
-                                ...settings,
-                                ...dbSettings,
+                                ...settings, ...dbSettings,
                                 bgConfigMap: dbSettings.bgConfigMap || {}, 
+                                specificViewKeywords: dbSettings.specificViewKeywords || ['MOMO'], // [CR-IMPL] 載入設定時兼容舊資料
                                 viewConfigs: {
                                     active: migrateConfig(dbSettings.viewConfigs?.active),
                                     completed: migrateConfig(dbSettings.viewConfigs?.completed),
@@ -1442,29 +1292,15 @@
                             setSettings(mergedSettings);
                         }
                         if (dbBgHistory) setBgHistory(dbBgHistory);
-
                         setIsDataLoaded(true);
-                    } catch (err) {
-                        console.error("Database initialization failed:", err);
-                    }
+                    } catch (err) { console.error("Database initialization failed:", err); }
                 };
                 initData();
             }, []);
 
-            useEffect(() => {
-                if (!isDataLoaded) return;
-                dbHelper.setItem('wallet_tasks_v3', tasks).catch(e => console.error("Save tasks failed:", e));
-            }, [tasks, isDataLoaded]);
-
-            useEffect(() => {
-                if (!isDataLoaded) return;
-                dbHelper.setItem('wallet_settings_v3', settings).catch(e => console.error("Save settings failed:", e));
-            }, [settings, isDataLoaded]);
-
-            useEffect(() => {
-                if (!isDataLoaded) return;
-                dbHelper.setItem('wallet_bg_history_v3', bgHistory).catch(e => console.error("Save history failed:", e));
-            }, [bgHistory, isDataLoaded]);
+            useEffect(() => { if (isDataLoaded) dbHelper.setItem('wallet_tasks_v3', tasks); }, [tasks, isDataLoaded]);
+            useEffect(() => { if (isDataLoaded) dbHelper.setItem('wallet_settings_v3', settings); }, [settings, isDataLoaded]);
+            useEffect(() => { if (isDataLoaded) dbHelper.setItem('wallet_bg_history_v3', bgHistory); }, [bgHistory, isDataLoaded]);
 
             useEffect(() => {
                 const checkNotifications = async () => {
@@ -1475,13 +1311,9 @@
                             const expiring = tasks.filter(t => !t.completed && !t.isDeleted && checkIsExpiringSoon(t.expiry, settings.notifyDays));
                             if (expiring.length > 0) {
                                 let msg = `⚠️ *[${settings.appTitle}] 到期提醒 (${expiring.length}筆)*\n\n`;
-                                expiring.slice(0, 10).forEach(t => {
-                                    msg += `🔸 ${t.productName} (${t.expiry || '無'})\n`;
-                                });
+                                expiring.slice(0, 10).forEach(t => msg += `🔸 ${t.productName} (${t.expiry || '無'})\n`);
                                 const result = await sendTelegramMessage(settings.tgToken, settings.tgChatId, msg);
-                                if(result.success) {
-                                    localStorage.setItem(lastCheckKey, todayStr);
-                                }
+                                if(result.success) localStorage.setItem(lastCheckKey, todayStr);
                             }
                         }
                     }
@@ -1490,14 +1322,9 @@
             }, [tasks, settings, isDataLoaded]);
 
             const allTags = useMemo(() => [...new Set(tasks.flatMap(t => t.tags || []))], [tasks]);
-
             const duplicateSerials = useMemo(() => {
                 const counts = {};
-                tasks.forEach(t => {
-                    if (!t.isDeleted && t.serial) {
-                        counts[t.serial] = (counts[t.serial] || 0) + 1;
-                    }
-                });
+                tasks.forEach(t => { if (!t.isDeleted && t.serial) counts[t.serial] = (counts[t.serial] || 0) + 1; });
                 return new Set(Object.keys(counts).filter(s => counts[s] > 1));
             }, [tasks]);
 
@@ -1506,14 +1333,8 @@
                     if (view === 'active' && (t.completed || t.isDeleted)) return false;
                     if (view === 'completed' && (!t.completed || t.isDeleted)) return false;
                     if (view === 'deleted' && !t.isDeleted) return false;
-                    
-                    if (activeTag === 'special_expiring') {
-                        return checkIsExpiringSoon(t.expiry, settings.notifyDays) && !t.completed && !t.isDeleted;
-                    }
-                    if (activeTag === 'special_duplicate') {
-                        return duplicateSerials.has(t.serial) && !t.completed && !t.isDeleted;
-                    }
-
+                    if (activeTag === 'special_expiring') return checkIsExpiringSoon(t.expiry, settings.notifyDays) && !t.completed && !t.isDeleted;
+                    if (activeTag === 'special_duplicate') return duplicateSerials.has(t.serial) && !t.completed && !t.isDeleted;
                     if (activeTag !== 'all' && (!t.tags || !t.tags.includes(activeTag))) return false;
                     if (searchQuery) {
                         const q = searchQuery.toLowerCase();
@@ -1521,16 +1342,13 @@
                     }
                     return true;
                 });
-                
                 result.sort((a, b) => {
                     const isExpiringA = !a.completed && !a.isDeleted && checkIsExpiringSoon(a.expiry, settings.notifyDays);
                     const isExpiringB = !b.completed && !b.isDeleted && checkIsExpiringSoon(b.expiry, settings.notifyDays);
                     if (isExpiringA !== isExpiringB) return isExpiringA ? -1 : 1;
-
                     const isDupA = duplicateSerials.has(a.serial) && !a.completed && !a.isDeleted;
                     const isDupB = duplicateSerials.has(b.serial) && !b.completed && !b.isDeleted;
                     if (isDupA !== isDupB) return isDupA ? -1 : 1;
-
                     if (sortType === 'expiring') {
                         const dateA = a.expiry ? new Date(a.expiry.replace(/\//g, '-')) : new Date(9999, 11, 31);
                         const dateB = b.expiry ? new Date(b.expiry.replace(/\//g, '-')) : new Date(9999, 11, 31);
@@ -1547,52 +1365,43 @@
             const handleToggleComplete = async (ticket) => {
                 const newStatus = !ticket.completed;
                 const completedAt = newStatus ? Date.now() : null; 
-
                 setTasks(prev => prev.map(t => t.id === ticket.id ? { ...t, completed: newStatus, completedAt: completedAt } : t));
-                
                 if (newStatus && settings.tgToken && settings.tgChatId) {
-                   const msg = `✅ *[已核銷]* ${ticket.productName}\n📅 期限: ${ticket.expiry || '無'}\n⏰ 時間: ${formatDateTime(completedAt)}`;
+                   const msg = `✅ *[已核銷]* ${ticket.productName}\n⏰ 時間: ${formatDateTime(completedAt)}`;
                    sendTelegramMessage(settings.tgToken, settings.tgChatId, msg).catch(e => console.error(e));
                 }
             };
-            
             const handleDelete = (id) => {
                 if(view === 'deleted') { if(confirm("確定永久刪除？")) setTasks(prev => prev.filter(t => t.id !== id)); }
                 else setTasks(prev => prev.map(t => t.id === id ? { ...t, isDeleted: true } : t));
             };
             const handleRestore = (ticket) => setTasks(prev => prev.map(t => t.id === ticket.id ? { ...t, isDeleted: false } : t));
-            const handleDeleteTag = (tag) => {
-                if(confirm(`刪除標籤 "${tag}"？`)) setTasks(prev => prev.map(t => ({ ...t, tags: (t.tags||[]).filter(tt => tt !== tag) })));
-            };
+            const handleDeleteTag = (tag) => setTasks(prev => prev.map(t => ({ ...t, tags: (t.tags||[]).filter(tt => tt !== tag) })));
             
             const handleBackup = () => {
-                const backupData = {
-                    version: 3,
-                    timestamp: Date.now(),
-                    settings: settings,
-                    tasks: tasks
-                };
+                const backupData = { version: 3, timestamp: Date.now(), settings: settings, tasks: tasks };
                 const blob = new Blob([JSON.stringify(backupData, null, 2)], {type: "application/json"});
                 const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `ticket_backup_idb_${new Date().toISOString().split('T')[0]}.json`; a.click();
             };
             
-            const handleImport = () => {
+            const handleImportClick = () => {
                 const input = document.createElement('input'); input.type = 'file';
                 input.onchange = e => {
                     const r = new FileReader(); 
-                    r.onload = ev => { 
-                        try { 
-                            const data = JSON.parse(ev.target.result);
-                            const importedTasks = Array.isArray(data) ? data : (data.tasks || []);
-                            if (confirm("是否覆蓋現有票券與設定？")) {
-                                if (data.settings) setSettings(data.settings);
-                                setTasks(importedTasks);
-                                alert(`匯入成功！共 ${importedTasks.length} 筆票券。`);
-                            }
-                        } catch(e){alert("格式錯誤");} 
-                    };
+                    r.onload = ev => { try { setImportPendingData(JSON.parse(ev.target.result)); setShowDataModal(false); } catch(e){alert("格式錯誤");} };
                     r.readAsText(e.target.files[0]);
                 }; input.click();
+            };
+
+            // [CR-IMPL] 執行匯入 (由 ImportConfirmModal 觸發)
+            const executeImport = (mode, restoreSettings) => {
+                if (!importPendingData) return;
+                const importedTasks = Array.isArray(importPendingData) ? importPendingData : (importPendingData.tasks || []);
+                if (restoreSettings && importPendingData.settings) setSettings(prev => ({...prev, ...importPendingData.settings}));
+                if (mode === 'append') setTasks(prev => [...prev, ...importedTasks]);
+                else setTasks(importedTasks);
+                setImportPendingData(null);
+                alert(`匯入成功！共 ${importedTasks.length} 筆票券。`);
             };
 
             const handleFullReset = async () => {
@@ -1605,225 +1414,62 @@
                 }
             };
             
-            const handleSelect = (id) => {
-                const newSet = new Set(selectedIds);
-                if(newSet.has(id)) newSet.delete(id); else newSet.add(id);
-                setSelectedIds(newSet);
-            };
-
-            const handleSelectAll = () => {
-                if(selectedIds.size === filteredTasks.length) {
-                    setSelectedIds(new Set());
-                } else {
-                    setSelectedIds(new Set(filteredTasks.map(t => t.id)));
-                }
-            }
-            
-            const handleBatchAddTag = (tagsToAdd) => {
-                setTasks(prev => prev.map(t => {
-                    if (selectedIds.has(t.id)) {
-                        const newTags = new Set([...(t.tags || []), ...tagsToAdd]);
-                        return { ...t, tags: Array.from(newTags) };
-                    }
-                    return t;
-                }));
-                setSelectedIds(new Set());
-                setIsSelectionMode(false);
-            };
-
+            const handleSelect = (id) => { const s = new Set(selectedIds); if(s.has(id)) s.delete(id); else s.add(id); setSelectedIds(s); };
+            const handleSelectAll = () => setSelectedIds(selectedIds.size === filteredTasks.length ? new Set() : new Set(filteredTasks.map(t => t.id)));
+            const handleBatchAddTag = (tagsToAdd) => { setTasks(prev => prev.map(t => selectedIds.has(t.id) ? { ...t, tags: Array.from(new Set([...(t.tags || []), ...tagsToAdd])) } : t)); setSelectedIds(new Set()); setIsSelectionMode(false); };
             const handleSaveSettings = (newSettings) => {
                 setSettings(newSettings);
-                const imagesToAdd = [
-                    newSettings.viewConfigs.active.backgroundImage,
-                    newSettings.viewConfigs.completed.backgroundImage,
-                    newSettings.viewConfigs.deleted.backgroundImage
-                ].filter(Boolean);
-
-                if (imagesToAdd.length > 0) {
-                    setBgHistory(prev => {
-                        const combined = [...imagesToAdd, ...prev];
-                        const unique = [...new Set(combined)];
-                        return unique.slice(0, 20);
-                    });
-                }
+                const imagesToAdd = [newSettings.viewConfigs.active.backgroundImage, newSettings.viewConfigs.completed.backgroundImage, newSettings.viewConfigs.deleted.backgroundImage].filter(Boolean);
+                if (imagesToAdd.length > 0) setBgHistory(prev => [...new Set([...imagesToAdd, ...prev])].slice(0, 20));
             };
-            
-            const handleRemoveHistory = (url) => {
-                const isUsed = Object.values(settings.viewConfigs).some(config => config.backgroundImage === url);
-                const confirmMsg = isUsed 
-                    ? "此圖片正在使用中，移除後背景將還原為純色。確定要移除此背景紀錄嗎？" 
-                    : "確定要移除此背景紀錄嗎？";
-
-                if(confirm(confirmMsg)) {
-                    setBgHistory(prev => prev.filter(item => item !== url));
-                    
-                    if (isUsed) {
-                        setSettings(prev => {
-                            const next = { ...prev };
-                            Object.keys(next.viewConfigs).forEach(viewKey => {
-                                if (next.viewConfigs[viewKey].backgroundImage === url) {
-                                    next.viewConfigs[viewKey].backgroundImage = '';
-                                }
-                            });
-                            return next;
-                        });
-                    }
-                }
-            };
-
-            const handleAddToHistory = (newBg) => {
-                if (!newBg) return;
-                setBgHistory(prev => {
-                    const filtered = prev.filter(bg => bg !== newBg);
-                    const updated = [newBg, ...filtered];
-                    return updated.slice(0, 20);
-                });
-            };
-
+            const handleRemoveHistory = (url) => { if(confirm("確定要移除此背景紀錄嗎？")) setBgHistory(prev => prev.filter(item => item !== url)); };
+            const handleAddToHistory = (newBg) => { if (newBg) setBgHistory(prev => [newBg, ...prev.filter(bg => bg !== newBg)].slice(0, 20)); };
             const handleQuickBgChange = () => {
                 const history = [''].concat(bgHistory);
                 const currentBg = settings.viewConfigs[view].backgroundImage || '';
-                let currentIndex = history.indexOf(currentBg);
-                if (currentIndex === -1) currentIndex = 0;
-                const nextIndex = (currentIndex + 1) % history.length;
-                const nextBg = history[nextIndex];
-
+                const nextBg = history[(history.indexOf(currentBg) + 1) % history.length] || '';
                 setSettings(prev => {
                     let next = { ...prev };
-                    let currentView = { ...next.viewConfigs[view] };
-                    currentView.backgroundImage = nextBg;
-                    
+                    let currentView = { ...next.viewConfigs[view], backgroundImage: nextBg };
                     const sharedConfig = next.bgConfigMap?.[nextBg];
-                    if (sharedConfig) {
-                        currentView.bgSize = sharedConfig.bgSize;
-                        currentView.bgPosY = sharedConfig.bgPosY;
-                    }
-                    
+                    if (sharedConfig) { currentView.bgSize = sharedConfig.bgSize; currentView.bgPosY = sharedConfig.bgPosY; }
                     next.viewConfigs = { ...next.viewConfigs, [view]: currentView };
                     return next;
                 });
             };
 
-            if (!isDataLoaded) {
-                return (
-                    <div className="fixed inset-0 bg-slate-50 flex flex-col items-center justify-center gap-4">
-                        <Loader2 className="w-12 h-12 text-sky-500 animate-spin" />
-                        <p className="text-slate-400 font-bold animate-pulse">正在載入資料庫...</p>
-                    </div>
-                );
-            }
-
+            if (!isDataLoaded) return <div className="fixed inset-0 bg-slate-50 flex flex-col items-center justify-center gap-4"><Loader2 className="w-12 h-12 text-sky-500 animate-spin" /><p className="text-slate-400 font-bold animate-pulse">正在載入資料庫...</p></div>;
             const currentConfig = settings.viewConfigs[view] || defaultViewConfig;
 
             return (
                 <>
-                    {currentConfig.backgroundImage && (
-                        <div 
-                            className="fixed inset-0 z-0 mx-auto max-w-md transition-all duration-500"
-                            style={{
-                                top: '190px',
-                                backgroundImage: `url(${currentConfig.backgroundImage})`,
-                                backgroundSize: `${currentConfig.bgSize || 100}% auto`, 
-                                backgroundPosition: `center ${currentConfig.bgPosY || 50}%`,
-                                backgroundRepeat: 'no-repeat',
-                            }}
-                        />
-                    )}
-
-                    <div 
-                        className="max-w-md mx-auto min-h-screen relative shadow-2xl sm:border-x border-slate-200 transition-all duration-500 z-10"
-                        style={{
-                            backgroundColor: currentConfig.backgroundImage ? 'transparent' : '#f8fafc',
-                        }}
-                    >
+                    {currentConfig.backgroundImage && <div className="fixed inset-0 z-0 mx-auto max-w-md transition-all duration-500" style={{ top: '190px', backgroundImage: `url(${currentConfig.backgroundImage})`, backgroundSize: `${currentConfig.bgSize || 100}% auto`, backgroundPosition: `center ${currentConfig.bgPosY || 50}%`, backgroundRepeat: 'no-repeat' }} />}
+                    <div className="max-w-md mx-auto min-h-screen relative shadow-2xl sm:border-x border-slate-200 transition-all duration-500 z-10" style={{ backgroundColor: currentConfig.backgroundImage ? 'transparent' : '#f8fafc' }}>
                         <Header 
-                            appTitle={settings.appTitle}
-                            onTitleChange={(t) => setSettings(s => ({...s, appTitle: t}))}
+                            appTitle={settings.appTitle} onTitleChange={(t) => setSettings(s => ({...s, appTitle: t}))}
                             onOpenSettings={() => setShowSettings(true)}
-                            onOpenMenu={() => {
-                                const action = prompt("1.完整備份(含設定) 2.匯入還原 3.清空票券 4.徹底重設(測試空間用)");
-                                if(action==='1') handleBackup(); 
-                                if(action==='2') handleImport(); 
-                                if(action==='3' && confirm("確定清空所有票券？")) setTasks([]);
-                                if(action==='4') handleFullReset();
-                            }}
-                            sortType={sortType} setSortType={setSortType}
-                            searchQuery={searchQuery} setSearchQuery={setSearchQuery}
-                            isSelectionMode={isSelectionMode} setIsSelectionMode={setIsSelectionMode}
-                            selectedCount={selectedIds.size}
-                            onSelectAll={handleSelectAll}
-                            isCompact={isCompact}
-                            setIsCompact={setIsCompact}
-                            hasBg={!!currentConfig.backgroundImage}
-                            view={view} setView={setView}
-                            activeTag={activeTag} setActiveTag={setActiveTag}
-                            allTags={allTags}
-                            onQuickBgChange={handleQuickBgChange}
-                            headerBackgroundImage={currentConfig.headerBackgroundImage}
+                            // [CR-IMPL] 修改 Menu 行為：開啟 DataActionsModal
+                            onOpenMenu={() => setShowDataModal(true)}
+                            sortType={sortType} setSortType={setSortType} searchQuery={searchQuery} setSearchQuery={setSearchQuery} isSelectionMode={isSelectionMode} setIsSelectionMode={setIsSelectionMode} selectedCount={selectedIds.size} onSelectAll={handleSelectAll} isCompact={isCompact} setIsCompact={setIsCompact} view={view} setView={setView} activeTag={activeTag} setActiveTag={setActiveTag} allTags={allTags} onQuickBgChange={handleQuickBgChange} headerBackgroundImage={currentConfig.headerBackgroundImage}
                         />
+                        <div className="pt-2 min-h-[50vh] transition-colors">{filteredTasks.length > 0 ? filteredTasks.map(t => <TicketCard key={t.id} ticket={t} onClick={setSelectedTicket} notifyDays={settings.notifyDays} isSelectionMode={isSelectionMode} isSelected={selectedIds.has(t.id)} onSelect={handleSelect} isDuplicate={duplicateSerials.has(t.serial)} opacity={currentConfig.cardOpacity} cardBgColor={currentConfig.cardBgColor} cardBorderColor={currentConfig.cardBorderColor} isCompact={isCompact} compactHeight={currentConfig.compactHeight} compactShowImage={currentConfig.compactShowImage} />) : <div className="text-center py-24 text-slate-300"><i className="fas fa-ticket-alt text-5xl mb-4 opacity-30"></i><p className="font-bold">暫無票券</p></div>}</div>
                         
-                        <div className="pt-2 min-h-[50vh] transition-colors">
-                            {filteredTasks.length > 0 ? (
-                                filteredTasks.map(ticket => (
-                                    <TicketCard 
-                                        key={ticket.id} ticket={ticket} 
-                                        onClick={setSelectedTicket} notifyDays={settings.notifyDays}
-                                        isSelectionMode={isSelectionMode} isSelected={selectedIds.has(ticket.id)} onSelect={handleSelect}
-                                        isDuplicate={duplicateSerials.has(ticket.serial)}
-                                        opacity={currentConfig.cardOpacity}
-                                        cardBgColor={currentConfig.cardBgColor}
-                                        cardBorderColor={currentConfig.cardBorderColor}
-                                        isCompact={isCompact}
-                                        compactHeight={currentConfig.compactHeight}
-                                        compactShowImage={currentConfig.compactShowImage}
-                                    />
-                                ))
-                            ) : (
-                                <div className="text-center py-24 text-slate-300">
-                                    <i className="fas fa-ticket-alt text-5xl mb-4 opacity-30"></i>
-                                    <p className="font-bold">暫無票券</p>
-                                </div>
-                            )}
-                        </div>
-
                         {isSelectionMode ? (
                             <div className="fixed bottom-10 left-1/2 -translate-x-1/2 flex gap-3 z-40 animate-slide-up">
-                                {selectedIds.size > 0 && (
-                                    <>
-                                        <button onClick={() => setShowBatchModal(true)} className="bg-sky-500 hover:bg-sky-600 text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-sky-200 flex items-center gap-2 transition-transform active:scale-95">
-                                            <Tag size={18}/> 批量標籤
-                                        </button>
-                                        <button onClick={() => {
-                                            if(confirm(`確定刪除 ${selectedIds.size} 項目？`)) {
-                                                if(view === 'deleted') setTasks(prev => prev.filter(t => !selectedIds.has(t.id)));
-                                                else setTasks(prev => prev.map(t => selectedIds.has(t.id) ? { ...t, isDeleted: true } : t));
-                                                setSelectedIds(new Set()); setIsSelectionMode(false);
-                                            }
-                                        }} className="bg-white text-red-500 border border-red-100 px-4 py-3 rounded-2xl font-bold shadow-lg flex items-center gap-2 hover:bg-red-50">
-                                            <Trash2 size={18}/>
-                                        </button>
-                                    </>
-                                )}
+                                {selectedIds.size > 0 && <><button onClick={() => setShowBatchModal(true)} className="bg-sky-500 hover:bg-sky-600 text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-sky-200 flex items-center gap-2"><Tag size={18}/> 批量標籤</button><button onClick={() => { if(confirm(`確定刪除 ${selectedIds.size} 項目？`)) { if(view === 'deleted') setTasks(prev => prev.filter(t => !selectedIds.has(t.id))); else setTasks(prev => prev.map(t => selectedIds.has(t.id) ? { ...t, isDeleted: true } : t)); setSelectedIds(new Set()); setIsSelectionMode(false); } }} className="bg-white text-red-500 border border-red-100 px-4 py-3 rounded-2xl font-bold shadow-lg flex items-center gap-2 hover:bg-red-50"><Trash2 size={18}/></button></>}
                                 <button onClick={() => {setIsSelectionMode(false); setSelectedIds(new Set());}} className="bg-slate-800 text-white px-4 py-3 rounded-2xl font-bold shadow-lg">取消</button>
                             </div>
-                        ) : (
-                            <button onClick={() => setShowAddModal(true)} className="fixed bottom-10 right-5 w-16 h-16 bg-sky-500 text-white rounded-[24px] shadow-2xl shadow-sky-300 flex items-center justify-center text-3xl active:scale-90 transition-transform z-40 hover:bg-sky-600 hover:rotate-90 duration-300">
-                                <Plus size={32}/>
-                            </button>
-                        )}
+                        ) : <button onClick={() => setShowAddModal(true)} className="fixed bottom-10 right-5 w-16 h-16 bg-sky-500 text-white rounded-[24px] shadow-2xl flex items-center justify-center text-3xl active:scale-90 transition-transform z-40"><Plus size={32}/></button>}
 
                         <AddTicketModal isOpen={showAddModal} onClose={() => setShowAddModal(false)} onAddBatch={handleAddBatch} allTags={allTags} />
-                        <RedeemModal ticket={selectedTicket} onClose={() => setSelectedTicket(null)} onToggleComplete={handleToggleComplete} onDelete={handleDelete} onRestore={handleRestore} onUpdate={handleUpdate} allTags={allTags} />
-                        <SettingsModal 
-                            isOpen={showSettings} onClose={() => setShowSettings(false)} 
-                            settings={settings}
-                            bgHistory={bgHistory}
-                            onSave={handleSaveSettings}
-                            onRemoveHistory={handleRemoveHistory}
-                            onAddToHistory={handleAddToHistory}
-                        />
+                        <RedeemModal ticket={selectedTicket} onClose={() => setSelectedTicket(null)} onToggleComplete={handleToggleComplete} onDelete={handleDelete} onRestore={handleRestore} onUpdate={handleUpdate} allTags={allTags} specificViewKeywords={settings.specificViewKeywords} />
+                        <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} settings={settings} bgHistory={bgHistory} onSave={handleSaveSettings} onRemoveHistory={handleRemoveHistory} onAddToHistory={handleAddToHistory} />
                         <TagManagerModal isOpen={showTagManager} onClose={() => setShowTagManager(false)} tags={allTags} onDeleteTag={handleDeleteTag} />
                         <BatchEditModal isOpen={showBatchModal} onClose={() => setShowBatchModal(false)} selectedCount={selectedIds.size} onAddTag={handleBatchAddTag} allTags={allTags} />
+                        
+                        {/* [CR-IMPL] 新增的 Modal 元件 */}
+                        <DataActionsModal isOpen={showDataModal} onClose={() => setShowDataModal(false)} onBackup={handleBackup} onImportClick={handleImportClick} onReset={handleFullReset} />
+                        <ImportConfirmModal isOpen={!!importPendingData} data={importPendingData} onCancel={() => setImportPendingData(null)} onConfirm={executeImport} />
                     </div>
                 </>
             );
