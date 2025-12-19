@@ -44,6 +44,10 @@
                         },
                         accent: {
                             50: '#fdf4ff', 500: '#d946ef', // Fuchsia
+                        },
+                        momo: {
+                            DEFAULT: '#ed1a7d', // momo 桃紅色
+                            light: '#fbe8f1'
                         }
                     },
                     animation: {
@@ -108,7 +112,7 @@
             ImagePlus, Heart, HeartHandshake, Eye, EyeOff, Globe, BookOpen, Star, History, MousePointerClick, Layers,
             CalendarX2, CopyPlus, Lightbulb, Loader2, QrCode, SlidersHorizontal, ArrowUpDown, Image, CheckCheck, SendHorizontal, XCircle, Droplets,
             MoveVertical, BoxSelect, Monitor, Palette, Rows, LayoutGrid, ChevronRight, ChevronDown as ChevronDownIcon,
-            PanelTop, PaintBucket, Maximize, Move, Eye as PreviewIcon
+            PanelTop, PaintBucket, Maximize, Move, Eye as PreviewIcon, Info
         } from 'lucide-react';
 
         // --- 1. Core Logic (Helpers & DB) ---
@@ -548,7 +552,6 @@
                                     </div>
 
                                     <div className="bg-slate-50 p-3 rounded-xl space-y-3">
-                                        {/* [CR-IMPL] 修改: 預覽框比例由固定 h-24 改為 aspect-[3/5] 以符合真實背景區域比例 */}
                                         {currentViewConfig.backgroundImage && (
                                             <div className="w-32 aspect-[3/5] mx-auto bg-slate-200 rounded-xl border border-slate-300 relative overflow-hidden flex items-center justify-center shadow-inner">
                                                 <div 
@@ -965,6 +968,74 @@
             );
         };
 
+        // [CR-IMPL] 新增: MOMO 品牌模擬模板組件
+        const MomoTemplate = ({ ticket }) => {
+            return (
+                <div className="w-full bg-white border-2 border-momo rounded-3xl overflow-hidden shadow-xl animate-fade-in relative">
+                    {/* Header */}
+                    <div className="bg-momo px-4 py-3 flex justify-between items-center text-white">
+                        <span className="text-sm font-black tracking-widest flex items-center gap-1.5">
+                           <i className="fas fa-shopping-cart text-[10px]"></i> momo 電子票券
+                        </span>
+                        <div className="w-5 h-5 rounded-full border border-white/40 flex items-center justify-center">
+                            <Info size={10} className="text-white/80" />
+                        </div>
+                    </div>
+
+                    {/* Content Body */}
+                    <div className="p-5 space-y-5 text-left">
+                        {/* Product Name Section */}
+                        <div className="space-y-1">
+                            <div className="flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 bg-momo rounded-full"></span>
+                                <span className="text-[11px] font-bold text-slate-400">商品名稱</span>
+                            </div>
+                            <div className="pl-3 text-[15px] font-black text-slate-800 leading-tight">
+                                {ticket.productName}
+                            </div>
+                        </div>
+
+                        {/* Barcodes Section */}
+                        <div className="flex flex-col items-center py-4 border-y border-slate-50 bg-slate-50/30 rounded-2xl gap-4">
+                            <div className="w-full max-w-[280px] bg-white p-2 rounded-lg border border-slate-100 shadow-sm flex justify-center">
+                                <BarcodeCanvas text={ticket.serial} />
+                            </div>
+                            <div className="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
+                                <QRCodeCanvas text={ticket.serial} size={130} />
+                            </div>
+                        </div>
+
+                        {/* Info Grid */}
+                        <div className="grid grid-cols-2 gap-4 pt-1">
+                            <div className="space-y-1">
+                                <div className="text-[11px] font-bold text-slate-400">有效期</div>
+                                <div className="text-[13px] font-bold text-momo">
+                                    {ticket.expiry ? ticket.expiry : '無效期限制'}
+                                </div>
+                            </div>
+                            <div className="space-y-1">
+                                <div className="text-[11px] font-bold text-slate-400">券號</div>
+                                <div className="text-[13px] font-mono font-bold text-slate-600 break-all leading-tight">
+                                    {ticket.serial}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Footer Decoration */}
+                        <div className="flex justify-center pt-2">
+                             <div className="bg-momo-light text-momo text-[9px] px-3 py-1 rounded-full font-bold">
+                                請出示此畫面供櫃檯人員核銷
+                             </div>
+                        </div>
+                    </div>
+                    
+                    {/* Corner Rip Effect */}
+                    <div className="absolute top-[48px] -left-1.5 w-3 h-3 bg-slate-100 rounded-full shadow-inner"></div>
+                    <div className="absolute top-[48px] -right-1.5 w-3 h-3 bg-slate-100 rounded-full shadow-inner"></div>
+                </div>
+            );
+        };
+
         const RedeemModal = ({ ticket, onClose, onToggleComplete, onDelete, onRestore, onUpdate, allTags }) => {
             if (!ticket) return null;
             const [isEditing, setIsEditing] = useState(false);
@@ -972,7 +1043,11 @@
             const [editExpiry, setEditExpiry] = useState(ticket.expiry);
             const [editTags, setEditTags] = useState(ticket.tags || []);
             const [editImage, setEditImage] = useState(ticket.image || '');
-            const [showOriginalImage, setShowOriginalImage] = useState(false);
+            
+            // [CR-IMPL] 修改: viewMode 狀態切換，支援 'standard', 'image', 'momo'
+            const isMomoTicket = useMemo(() => ticket.tags?.some(t => t.toUpperCase() === 'MOMO'), [ticket.tags]);
+            const [viewMode, setViewMode] = useState(isMomoTicket ? 'momo' : (ticket.image && !ticket.serial ? 'image' : 'standard'));
+            
             const [showFullScreen, setShowFullScreen] = useState(false);
 
             const handleSave = () => {
@@ -1001,8 +1076,6 @@
 
             const hasImage = !!ticket.image;
             const hasSerial = !!ticket.serial;
-            const forceShowImage = hasImage && !hasSerial;
-            const displayImage = showOriginalImage || forceShowImage;
 
             return (
                 <>
@@ -1045,14 +1118,14 @@
 
                         {!isEditing && (
                             <div className="my-4 flex flex-col items-center gap-4">
-                                {hasSerial && hasImage && (
-                                    <div className="flex bg-slate-200 p-1 rounded-xl mb-1">
-                                        <button onClick={()=>setShowOriginalImage(false)} className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${!showOriginalImage ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}>條碼</button>
-                                        <button onClick={()=>setShowOriginalImage(true)} className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${showOriginalImage ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}>原圖</button>
-                                    </div>
-                                )}
+                                {/* [CR-IMPL] 多重檢視切換按鈕組 */}
+                                <div className="flex bg-slate-200 p-1 rounded-xl mb-1">
+                                    <button onClick={()=>setViewMode('standard')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${viewMode === 'standard' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500'}`}>條碼</button>
+                                    {hasImage && <button onClick={()=>setViewMode('image')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${viewMode === 'image' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500'}`}>原圖</button>}
+                                    {isMomoTicket && <button onClick={()=>setViewMode('momo')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${viewMode === 'momo' ? 'bg-momo text-white shadow-sm' : 'text-momo'}`}>MOMO</button>}
+                                </div>
 
-                                {displayImage && hasImage ? (
+                                {viewMode === 'image' ? (
                                      <div className="w-full flex flex-col items-center gap-4">
                                          <div className="relative group w-full cursor-zoom-in" onClick={() => setShowFullScreen(true)}>
                                              <img src={ticket.image} className="w-full h-auto rounded-xl shadow-sm border border-white" />
@@ -1069,6 +1142,8 @@
                                             </div>
                                          )}
                                      </div>
+                                ) : viewMode === 'momo' ? (
+                                    <MomoTemplate ticket={ticket} />
                                 ) : (
                                     <>
                                         {ticket.serial && <div className="bg-white p-2 rounded-xl border border-slate-100"><BarcodeCanvas text={ticket.serial} /></div>}
@@ -1563,7 +1638,6 @@
                 }
             };
             
-            // [CR-IMPL] 修改: handleRemoveHistory 邏輯，刪除圖片時自動檢查並清空分頁中的背景使用，阻斷自動收集循環
             const handleRemoveHistory = (url) => {
                 const isUsed = Object.values(settings.viewConfigs).some(config => config.backgroundImage === url);
                 const confirmMsg = isUsed 
@@ -1573,7 +1647,6 @@
                 if(confirm(confirmMsg)) {
                     setBgHistory(prev => prev.filter(item => item !== url));
                     
-                    // 若有分頁使用中，一併清空以防止 handleSaveSettings 時再次被加入歷史
                     if (isUsed) {
                         setSettings(prev => {
                             const next = { ...prev };
