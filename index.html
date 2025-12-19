@@ -108,10 +108,62 @@
             ImagePlus, Heart, HeartHandshake, Eye, EyeOff, Globe, BookOpen, Star, History, MousePointerClick, Layers,
             CalendarX2, CopyPlus, Lightbulb, Loader2, QrCode, SlidersHorizontal, ArrowUpDown, Image, CheckCheck, SendHorizontal, XCircle, Droplets,
             MoveVertical, BoxSelect, Monitor, Palette, Rows, LayoutGrid, ChevronRight, ChevronDown as ChevronDownIcon,
-            PanelTop, PaintBucket // Added PaintBucket
+            PanelTop, PaintBucket, Maximize, Move
         } from 'lucide-react';
 
-        // --- 1. Core Logic (Helpers) ---
+        // --- 1. Core Logic (Helpers & DB) ---
+
+        const dbHelper = {
+            dbName: 'WalletFreshDB',
+            storeName: 'kv_store',
+            db: null,
+            init() {
+                return new Promise((resolve, reject) => {
+                    const request = indexedDB.open(this.dbName, 1);
+                    request.onupgradeneeded = (e) => {
+                        const db = e.target.result;
+                        if (!db.objectStoreNames.contains(this.storeName)) {
+                            db.createObjectStore(this.storeName);
+                        }
+                    };
+                    request.onsuccess = (e) => {
+                        this.db = e.target.result;
+                        resolve(this.db);
+                    };
+                    request.onerror = (e) => reject(e.target.error);
+                });
+            },
+            async setItem(key, value) {
+                if (!this.db) await this.init();
+                return new Promise((resolve, reject) => {
+                    const tx = this.db.transaction(this.storeName, 'readwrite');
+                    const store = tx.objectStore(this.storeName);
+                    const request = store.put(value, key);
+                    request.onsuccess = () => resolve();
+                    request.onerror = () => reject(request.error);
+                });
+            },
+            async getItem(key) {
+                if (!this.db) await this.init();
+                return new Promise((resolve, reject) => {
+                    const tx = this.db.transaction(this.storeName, 'readonly');
+                    const store = tx.objectStore(this.storeName);
+                    const request = store.get(key);
+                    request.onsuccess = () => resolve(request.result);
+                    request.onerror = () => reject(request.error);
+                });
+            },
+            async removeItem(key) {
+                if (!this.db) await this.init();
+                return new Promise((resolve, reject) => {
+                    const tx = this.db.transaction(this.storeName, 'readwrite');
+                    const store = tx.objectStore(this.storeName);
+                    const request = store.delete(key);
+                    request.onsuccess = () => resolve();
+                    request.onerror = () => reject(request.error);
+                });
+            }
+        };
 
         const parseBatchTicketInfo = (text, overrideName) => {
             const results = [];
@@ -161,7 +213,6 @@
                 let objectUrl = null;
 
                 img.onload = () => {
-                    // Safety check for huge images (e.g. > 16MP) which might crash canvas
                     if (img.width * img.height > 16000000) {
                         if (objectUrl) URL.revokeObjectURL(objectUrl);
                         reject(new Error("Image resolution too high"));
@@ -169,7 +220,6 @@
                     }
 
                     const canvas = document.createElement('canvas');
-                    // [CR-IMPL] 修改: 移除解析度縮放限制 (原本 MAX = 800)，改為維持原圖寬高
                     let width = img.width; 
                     let height = img.height;
                     
@@ -315,28 +365,23 @@
             headerBackgroundImage: '', 
             cardOpacity: 0.95, 
             bgPosY: 50, 
-            bgSize: 'cover',
+            // [CR-IMPL] 修改: bgSize 預設值改為 100 (百分比)
+            bgSize: 100,
             cardBgColor: '#ffffff',
-            cardBorderColor: '#e2e8f0', // New Default
+            cardBorderColor: '#e2e8f0',
             compactHeight: 70,
             compactShowImage: false
         };
 
-        // [CR-IMPL] SettingsModal: Added onAddToHistory prop
         const SettingsModal = ({ isOpen, onClose, settings, bgHistory, onSave, onRemoveHistory, onAddToHistory }) => {
             if(!isOpen) return null;
             
             const [localSettings, setLocalSettings] = useState(JSON.parse(JSON.stringify(settings)));
-            // Current tab in settings modal: 'active' | 'completed' | 'deleted'
             const [currentTab, setCurrentTab] = useState('active');
             const [testStatus, setTestStatus] = useState(null);
-            // Removed fileInputRef as manual upload section is removed
-            // const fileInputRef = useRef(null); 
             const headerFileInputRef = useRef(null);
-            // [CR-IMPL] Ref for direct gallery upload
             const galleryInputRef = useRef(null);
 
-            // Get current view config, safe fallback
             const currentViewConfig = localSettings.viewConfigs?.[currentTab] || { ...defaultViewConfig };
 
             const handleGlobalChange = (key, value) => {
@@ -361,12 +406,9 @@
                 onClose();
             };
 
-            // Removed handleBgUpload as manual upload section is removed
-
             const handleHeaderBgUpload = async (e) => {
                 const file = e.target.files[0];
                 if(file) {
-                    // [CR-IMPL] 修改: 移除 5MB 檔案大小限制檢查
                     try {
                         const base64 = await compressImage(file);
                         handleViewConfigChange('headerBackgroundImage', base64);
@@ -374,14 +416,12 @@
                 }
             }
 
-            // [CR-IMPL] Handle direct gallery upload
             const handleGalleryUpload = async (e) => {
                 const file = e.target.files[0];
                 if(file) {
-                    // [CR-IMPL] 修改: 移除 5MB 檔案大小限制檢查
                     try {
                         const base64 = await compressImage(file);
-                        if(onAddToHistory) onAddToHistory(base64); // Call parent handler immediately
+                        if(onAddToHistory) onAddToHistory(base64); 
                     } catch(err) { alert("處理圖片時發生錯誤：" + err.message); }
                 }
             };
@@ -394,7 +434,7 @@
                     setTimeout(() => setTestStatus(null), 3000);
                 } else {
                     setTestStatus('error');
-                    alert(`發送失敗: ${result.error}\n\n可能原因：Token/ChatID錯誤，或瀏覽器CORS阻擋。\n請確認Bot已加入頻道並有發言權限。`);
+                    alert(`發送失敗: ${result.error}`);
                 }
             };
 
@@ -409,11 +449,9 @@
                                 <input type="number" value={localSettings.notifyDays} onChange={e => handleGlobalChange('notifyDays', e.target.value)} className="w-full p-3 bg-slate-50 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-sky-400"/>
                             </div>
                             
-                            {/* Background Settings */}
                             <div className="border-t border-slate-100 pt-4">
                                 <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 block">外觀設定</label>
                                 
-                                {/* View Selector Tabs */}
                                 <div className="flex bg-slate-100 p-1 rounded-xl mb-4">
                                     {[
                                         {id: 'active', label: '待使用', icon: ListTodo},
@@ -431,8 +469,6 @@
                                 </div>
 
                                 <div className="space-y-4 animate-fade-in">
-                                    
-                                    {/* Header Background Settings */}
                                     <div className="bg-slate-50 p-3 rounded-xl space-y-2">
                                         <div className="flex justify-between items-center">
                                             <label className="text-xs font-bold text-slate-500 flex items-center gap-1"><PanelTop size={12}/> 頂部功能區背景</label>
@@ -449,14 +485,12 @@
                                         </div>
                                     </div>
 
-                                    {/* History / Recent Backgrounds */}
                                     <div>
                                         <div className="text-xs font-bold text-slate-500 mb-2 flex justify-between">
                                             <span>曾經使用的背景 (主畫面)</span>
                                             {bgHistory.length === 0 && <span className="text-slate-300 font-normal">尚無紀錄</span>}
                                         </div>
                                         <div className="grid grid-cols-4 gap-2 mb-2">
-                                            {/* [CR-IMPL] New Upload to Gallery Card */}
                                             <div 
                                                 onClick={() => galleryInputRef.current?.click()}
                                                 className="w-full h-12 rounded-lg bg-sky-50 border border-dashed border-sky-200 text-sky-500 hover:bg-sky-100 hover:border-sky-300 flex items-center justify-center cursor-pointer transition-colors"
@@ -498,12 +532,36 @@
                                         </div>
                                     </div>
 
-                                    {/* [CR-IMPL] Removed Manual Upload & Preview Box */}
-                                    {/* [CR-IMPL] Removed Background Position & Size Controls */}
-
-                                    {/* Opacity & Color */}
+                                    {/* [CR-IMPL] 新增: 背景縮放與垂直位置控制滑桿 */}
                                     <div className="bg-slate-50 p-3 rounded-xl space-y-3">
-                                        {/* Color Picker */}
+                                        <div>
+                                            <div className="flex justify-between items-center mb-2">
+                                                <label className="text-xs font-bold text-slate-500 flex items-center gap-1"><Maximize size={12}/> 背景縮放 (寬度 %)</label>
+                                                <span className="text-xs font-bold text-sky-600">{currentViewConfig.bgSize || 100}%</span>
+                                            </div>
+                                            <input 
+                                                type="range" min="50" max="300" step="5"
+                                                value={currentViewConfig.bgSize || 100}
+                                                onChange={(e) => handleViewConfigChange('bgSize', parseInt(e.target.value))}
+                                                className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-sky-500"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <div className="flex justify-between items-center mb-2">
+                                                <label className="text-xs font-bold text-slate-500 flex items-center gap-1"><Move size={12}/> 背景垂直位置</label>
+                                                <span className="text-xs font-bold text-sky-600">{currentViewConfig.bgPosY || 50}%</span>
+                                            </div>
+                                            <input 
+                                                type="range" min="0" max="100" step="1"
+                                                value={currentViewConfig.bgPosY || 50}
+                                                onChange={(e) => handleViewConfigChange('bgPosY', parseInt(e.target.value))}
+                                                className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-sky-500"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-slate-50 p-3 rounded-xl space-y-3">
                                         <div className="flex justify-between items-center">
                                             <label className="text-xs font-bold text-slate-500 flex items-center gap-1"><Palette size={12}/> 卡片底色</label>
                                             <div className="flex items-center gap-2">
@@ -517,7 +575,6 @@
                                             </div>
                                         </div>
 
-                                        {/* Border Color Picker - NEW */}
                                         <div className="flex justify-between items-center">
                                             <label className="text-xs font-bold text-slate-500 flex items-center gap-1"><PaintBucket size={12}/> 卡片邊框</label>
                                             <div className="flex items-center gap-2">
@@ -531,7 +588,6 @@
                                             </div>
                                         </div>
                                         
-                                        {/* Opacity Slider (Inverted Logic as requested: 100% Transparency = 0 Opacity) */}
                                         <div>
                                             <div className="flex justify-between items-center mb-2">
                                                 <label className="text-xs font-bold text-slate-500 flex items-center gap-1"><Droplets size={12}/> 卡片透明度</label>
@@ -542,20 +598,13 @@
                                                 min="0" 
                                                 max="100" 
                                                 step="5" 
-                                                /* Value represents transparency % */
                                                 value={Math.round((1 - currentViewConfig.cardOpacity) * 100)} 
-                                                /* Convert transparency back to opacity */
                                                 onChange={(e) => handleViewConfigChange('cardOpacity', 1 - (parseInt(e.target.value) / 100))}
                                                 className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-sky-500"
                                             />
-                                            <div className="flex justify-between mt-1 px-1">
-                                                <span className="text-[10px] text-slate-400">不透明</span>
-                                                <span className="text-[10px] text-slate-400">完全透明</span>
-                                            </div>
                                         </div>
                                     </div>
 
-                                    {/* Compact Mode Settings */}
                                     <div className="bg-slate-50 p-3 rounded-xl space-y-3">
                                         <div className="flex justify-between items-center">
                                             <label className="text-xs font-bold text-slate-500 flex items-center gap-1"><Rows size={12}/> 列表模式高度</label>
@@ -611,32 +660,27 @@
             sortType, setSortType, setSearchQuery, searchQuery, 
             isSelectionMode, setIsSelectionMode, selectedCount, onSelectAll, 
             isCompact, setIsCompact, hasBg, 
-            // New Props
             view, setView, activeTag, setActiveTag, allTags,
-            onQuickBgChange, headerBackgroundImage // New Props
+            onQuickBgChange, headerBackgroundImage 
         }) => (
-            // Changed: Apply headerBackgroundImage if present
             <div 
                 className="px-5 pt-12 pb-4 shadow-sm sticky top-0 z-40 transition-all rounded-b-[24px] bg-white text-slate-800"
                 style={{
                     backgroundImage: headerBackgroundImage ? `url(${headerBackgroundImage})` : 'none',
-                    backgroundColor: headerBackgroundImage ? 'transparent' : 'white', // Maintain white if no image
+                    backgroundColor: headerBackgroundImage ? 'transparent' : 'white',
                     backgroundSize: 'cover',
                     backgroundPosition: 'center',
                 }}
             >
-                {/* Row 1: Title & Actions */}
                 <div className="flex justify-between items-center mb-4">
                     <div className="flex items-center gap-2 group cursor-pointer" onClick={() => {
                         const newTitle = prompt("修改標題名稱:", appTitle);
                         if(newTitle) onTitleChange(newTitle);
                     }}>
-                        {/* Add shadow to text if header has background for better readability */}
                         <h1 className={`text-2xl font-black tracking-tight ${headerBackgroundImage ? 'drop-shadow-md text-white' : 'drop-shadow-sm'}`}>{appTitle}</h1>
                         <Pencil size={14} className={`${headerBackgroundImage ? 'text-white/70' : 'text-slate-400'} group-hover:text-sky-500 transition-colors`}/>
                     </div>
                     <div className="flex gap-2">
-                        {/* New Quick BG Switcher */}
                          <button 
                             onClick={onQuickBgChange} 
                             className="w-9 h-9 rounded-full bg-slate-50/50 border border-slate-100/50 flex items-center justify-center text-slate-500 hover:text-sky-600 hover:bg-white transition-all shadow-sm"
@@ -667,9 +711,7 @@
                     </div>
                 </div>
                 
-                {/* Row 2: Search, Tags, View, Sort */}
                 <div className="flex flex-col gap-3">
-                    {/* Search & Tag Filter */}
                     <div className="flex gap-2">
                         <div className="relative flex-1 group">
                             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-sky-500 transition-colors" />
@@ -680,7 +722,6 @@
                                 className="w-full pl-10 pr-3 py-2.5 text-sm bg-slate-50/80 backdrop-blur-sm border border-slate-100 focus:bg-white focus:border-sky-200 rounded-2xl outline-none font-medium text-slate-700 transition-all placeholder:text-slate-400" 
                             />
                         </div>
-                         {/* New Tag Dropdown with Special Filters */}
                         <div className="relative">
                             <select
                                 value={activeTag}
@@ -696,9 +737,7 @@
                         </div>
                     </div>
 
-                    {/* View Switcher, Sort, Layout */}
                     <div className="flex justify-between items-center gap-2">
-                         {/* New View Switcher in Header */}
                          <div className="flex bg-slate-100/80 backdrop-blur-sm p-1 rounded-2xl">
                             {[
                                 {id: 'active', icon: ListTodo, label: '待用'},
@@ -730,7 +769,6 @@
                                     {sortType === 'expiring' ? '快到期' : sortType === 'newest' ? '最新' : '最舊'}
                                 </span>
                             </button>
-                            {/* Compact Mode Toggle */}
                             <button 
                                 onClick={() => setIsCompact(!isCompact)}
                                 className={`w-9 h-9 flex items-center justify-center rounded-full transition-all border ${isCompact ? 'bg-sky-500 text-white border-sky-500' : 'bg-slate-50/80 backdrop-blur-sm text-slate-500 hover:bg-slate-100 border-slate-100'}`}
@@ -744,19 +782,15 @@
             </div>
         );
 
-        // Removed TagTabs component as it is now integrated into Header
-
         const TicketCard = ({ ticket, onClick, notifyDays, isSelectionMode, isSelected, onSelect, isDuplicate, opacity = 0.95, cardBgColor = '#ffffff', cardBorderColor = '#e2e8f0', isCompact, compactHeight = 70, compactShowImage = false }) => {
             const isExpiring = !ticket.completed && ticket.expiry && checkIsExpiringSoon(ticket.expiry, notifyDays);
             
             const isDuplicateWarning = isDuplicate && !ticket.completed && !ticket.isDeleted;
             const isExpiringWarning = isExpiring && !ticket.completed && !ticket.isDeleted;
 
-            // Dynamic Background calculation
             const { r, g, b } = hexToRgb(cardBgColor);
             let bgBase = `rgba(${r}, ${g}, ${b}, ${opacity})`;
             
-            // Border Logic
             let overlayClass = '';
             let dynamicBorderStyle = {};
 
@@ -765,17 +799,12 @@
             } else if (isExpiringWarning) {
                 overlayClass = 'bg-red-500/10 border-red-400 shadow-red-100';
             } else {
-                // Normal state: use custom border color
                 overlayClass = 'hover:shadow-md border';
                 dynamicBorderStyle = { borderColor: cardBorderColor };
             }
 
-            // Duplicate always adds red border on top if needed (using ring for visibility or border override)
-            // But if it's already red from expiring, duplicate just adds duplication label
-            // If duplicate but not expiring, we need red border.
             const duplicateClass = isDuplicateWarning ? 'border-red-500 ring-2 ring-red-100 shadow-red-200' : '';
 
-            // --- Compact Mode Render (Tighter) ---
             if (isCompact) {
                 return (
                     <div 
@@ -785,7 +814,6 @@
                         }}
                         style={{ backgroundColor: bgBase, height: `${compactHeight}px`, ...(!isSelected && !isExpiringWarning && !isDuplicateWarning ? dynamicBorderStyle : {}) }}
                         className="backdrop-blur-sm mx-2 mb-1 px-2 rounded-lg shadow-sm flex items-center gap-2 active:scale-[0.98] transition-all cursor-pointer relative overflow-hidden group"
-                        /* Removed extra classes to maintain simplicity here, using template literal as before */
                     >
                         {isSelectionMode && (
                             <div className={`w-4 h-4 flex-shrink-0 rounded-full border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-sky-500 border-sky-500' : 'border-slate-300 bg-white'}`}>
@@ -793,7 +821,6 @@
                             </div>
                         )}
                         
-                        {/* Compact Image (Optional) */}
                         {compactShowImage && (
                             <div className="h-full aspect-square py-1 mr-1 flex-shrink-0">
                                 {ticket.image ? (
@@ -817,7 +844,6 @@
                             </div>
                             <div className="flex items-center gap-2 mt-0.5">
                                 {isExpiringWarning && <span className="text-[9px] font-bold text-red-500 flex items-center gap-0.5"><AlertCircle size={9}/> 快到期</span>}
-                                {/* Modified: text-slate-400 -> text-emerald-500 for normal expiry text */}
                                 <span className={`text-[10px] font-bold ${ticket.completed ? 'text-emerald-600' : 'text-emerald-500'}`}>
                                     {ticket.completed ? `已用 ${formatTime(ticket.completedAt)}` : (ticket.expiry || '無期限')}
                                 </span>
@@ -833,7 +859,6 @@
                 );
             }
 
-            // --- Standard (Expanded) Render ---
             return (
                 <div 
                     onClick={() => {
@@ -855,7 +880,6 @@
                         </div>
                     )}
 
-                    {/* Modified Image Container: Removed bg-slate-50 and border to support transparency */}
                     <div className="w-20 h-20 flex-shrink-0 rounded-2xl flex items-center justify-center overflow-hidden relative group-hover:scale-105 transition-transform">
                         {ticket.image ? (
                             <img src={ticket.image} alt="logo" className={`w-full h-full object-cover ${ticket.completed ? 'grayscale opacity-50' : ''}`} />
@@ -891,7 +915,6 @@
                                     <CheckCircle2 size={10}/> <span>核銷於 {formatDateTime(ticket.completedAt)}</span>
                                 </div>
                             ) : (
-                                /* Modified: text-slate-400 -> text-emerald-500 for normal expiry text */
                                 <div className={`text-xs font-bold flex items-center gap-1.5 ${isExpiring ? 'text-red-500' : 'text-emerald-500'}`}>
                                     <Clock size={12}/> <span>{ticket.expiry || '無期限'}</span>
                                 </div>
@@ -905,7 +928,6 @@
                         </div>
                     </div>
                     
-                    {/* Rip Effect circles need background color update dynamically if possible, but keep simple for now */}
                     <div className="ticket-rip-l" style={{backgroundColor: 'transparent', boxShadow: 'none', borderLeft: '6px solid transparent'}}></div> 
                 </div>
             );
@@ -919,8 +941,6 @@
             const [editTags, setEditTags] = useState(ticket.tags || []);
             const [editImage, setEditImage] = useState(ticket.image || '');
             const [showOriginalImage, setShowOriginalImage] = useState(false);
-            
-            // Fullscreen state
             const [showFullScreen, setShowFullScreen] = useState(false);
 
             const handleSave = () => {
@@ -938,13 +958,11 @@
             const handleImageChange = async (e) => {
                 const file = e.target.files[0];
                 if(file) {
-                    // [CR-IMPL] 修改: 移除 5MB 檔案大小限制檢查
                     try {
                         const base64 = await compressImage(file);
                         setEditImage(base64);
                     } catch(err) {
                         alert("處理圖片時發生錯誤：" + err.message);
-                        console.error(err);
                     }
                 }
             };
@@ -957,7 +975,7 @@
             return (
                 <>
                 <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 animate-fade-in backdrop-blur-md" onClick={onClose}>
-                    <div className="bg-white w-full max-w-md rounded-[32px] p-6 relative shadow-2xl overflow-y-auto max-h-[90vh] border border-white/20" onClick={e => e.stopPropagation()}>
+                    <div className="bg-white w-full max-md rounded-[32px] p-6 relative shadow-2xl overflow-y-auto max-h-[90vh] border border-white/20" onClick={e => e.stopPropagation()}>
                         
                         <div className="text-center mt-2">
                             {isEditing ? (
@@ -968,7 +986,6 @@
                             
                             {isEditing && (
                                 <div className="mt-4 text-left space-y-4 bg-slate-50 p-4 rounded-2xl">
-                                    {/* Image Editor */}
                                     <div>
                                         <label className="text-xs font-bold text-slate-400 uppercase">更換封面</label>
                                         <div className="flex items-center gap-3 mt-2">
@@ -995,7 +1012,6 @@
                         </div>
 
                         {!isEditing && (
-                            // Removed bg-slate-50, border, shadow-inner here
                             <div className="my-4 flex flex-col items-center gap-4">
                                 {hasSerial && hasImage && (
                                     <div className="flex bg-slate-200 p-1 rounded-xl mb-1">
@@ -1010,7 +1026,6 @@
                                              <img src={ticket.image} className="w-full h-auto rounded-xl shadow-sm border border-white" />
                                              <div className="absolute bottom-3 right-3 bg-slate-900/60 text-white p-1.5 rounded-lg pointer-events-none"><Maximize2 size={14}/></div>
                                          </div>
-                                         {/* Modification: Show BOTH Barcode and QR Code below image */}
                                          {ticket.serial && (
                                             <div className="w-full flex flex-col gap-3 animate-fade-in">
                                                 <div className="w-full bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
@@ -1044,7 +1059,6 @@
                                     {!ticket.isDeleted && (
                                         <button 
                                             onClick={() => { 
-                                                // Added Confirmation Alert
                                                 if(ticket.completed) {
                                                     onToggleComplete(ticket); 
                                                     onClose();
@@ -1055,7 +1069,7 @@
                                                     }
                                                 }
                                             }} 
-                                            className={`w-full py-5 text-lg font-bold rounded-2xl shadow-lg flex items-center justify-center gap-2 text-white transition-transform active:scale-95 ${ticket.completed ? 'bg-emerald-500 shadow-emerald-200 hover:bg-emerald-600' : 'bg-emerald-500 shadow-emerald-200 hover:bg-emerald-600'}`}
+                                            className={`w-full py-5 text-lg font-bold rounded-2xl shadow-lg flex items-center justify-center gap-2 text-white transition-transform active:scale-95 bg-emerald-500 shadow-emerald-200 hover:bg-emerald-600`}
                                         >
                                             {ticket.completed ? <><RotateCcw size={24}/> 標記為未用</> : <><CheckCircle2 size={24}/> 立即核銷</>}
                                         </button>
@@ -1084,14 +1098,12 @@
                     </div>
                 </div>
                 
-                {/* Full Screen Image Overlay */}
                 {showFullScreen && ticket.image && (
                     <div 
                         className="fixed inset-0 z-[60] bg-black flex items-center justify-center p-2 fullscreen-overlay"
                         onClick={() => setShowFullScreen(false)}
                     >
                         <img src={ticket.image} className="max-w-full max-h-full object-contain" />
-                        {/* [CR-IMPL] 修改: 將關閉按鈕背景改為深色半透明 bg-slate-900/60 並加入白邊，增加在白色背景下的可見度 */}
                         <button className="absolute top-4 right-4 w-10 h-10 bg-slate-900/60 text-white rounded-full flex items-center justify-center backdrop-blur-md hover:bg-slate-800 transition-colors border border-white/40 shadow-xl">
                             <X size={24}/>
                         </button>
@@ -1139,13 +1151,11 @@
             const handleImageUpload = async (e) => {
                 const file = e.target.files[0];
                 if(file) {
-                    // [CR-IMPL] 修改: 移除 5MB 檔案大小限制檢查
                     try {
                         const base64 = await compressImage(file);
                         setImages([base64]);
                     } catch(err) {
                         alert("處理圖片時發生錯誤：" + err.message);
-                        console.error(err);
                     }
                 }
             };
@@ -1248,143 +1258,108 @@
 
         // --- Main App ---
         const App = () => {
-            const [tasks, setTasks] = useState(() => JSON.parse(localStorage.getItem('wallet_tasks_v3')) || []);
+            const [tasks, setTasks] = useState([]);
             const [view, setView] = useState('active');
             const [activeTag, setActiveTag] = useState('all');
             const [sortType, setSortType] = useState('expiring');
             const [searchQuery, setSearchQuery] = useState('');
             const [showAddModal, setShowAddModal] = useState(false);
             const [selectedTicket, setSelectedTicket] = useState(null);
-            
-            // New State: Compact Mode
             const [isCompact, setIsCompact] = useState(false);
-            
-            // Selection Mode
             const [isSelectionMode, setIsSelectionMode] = useState(false);
             const [selectedIds, setSelectedIds] = useState(new Set());
             const [showBatchModal, setShowBatchModal] = useState(false);
-
-            // [CR-IMPL] 新增: 儲存空間防禦狀態
-            const [isStorageFull, setIsStorageFull] = useState(false);
-            const [storageAlert, setStorageAlert] = useState("");
-
-            // Settings State Initialization with Migration Logic
-            const [settings, setSettings] = useState(() => {
-                const saved = JSON.parse(localStorage.getItem('wallet_settings_v3'));
-                const defaults = { 
-                    tgToken: '', tgChatId: '', notifyDays: 7, appTitle: '我的票夾',
-                    viewConfigs: {
-                        active: { ...defaultViewConfig },
-                        completed: { ...defaultViewConfig },
-                        deleted: { ...defaultViewConfig }
-                    }
-                };
-
-                if (!saved) return defaults;
-
-                // Migration: If old flat structure exists, move it to 'active' view config
-                if (saved.backgroundImage !== undefined || saved.cardOpacity !== undefined) {
-                    return {
-                        ...defaults,
-                        tgToken: saved.tgToken || '',
-                        tgChatId: saved.tgChatId || '',
-                        notifyDays: saved.notifyDays || 7,
-                        appTitle: saved.appTitle || '我的票夾',
-                        viewConfigs: {
-                            active: {
-                                backgroundImage: saved.backgroundImage || '',
-                                headerBackgroundImage: '', // Add new field
-                                cardOpacity: saved.cardOpacity !== undefined ? saved.cardOpacity : 0.95,
-                                bgPosY: saved.bgPosY || 50,
-                                bgSize: saved.bgSize || 'cover',
-                                cardBgColor: '#ffffff',
-                                cardBorderColor: '#e2e8f0', // Add new field
-                                compactHeight: 70,
-                                compactShowImage: false
-                            },
-                            completed: { ...defaultViewConfig }, 
-                            deleted: { ...defaultViewConfig }
-                        }
-                    };
+            const [settings, setSettings] = useState({ 
+                tgToken: '', tgChatId: '', notifyDays: 7, appTitle: '我的票夾',
+                viewConfigs: {
+                    active: { ...defaultViewConfig },
+                    completed: { ...defaultViewConfig },
+                    deleted: { ...defaultViewConfig }
                 }
-
-                const activeConfig = saved.viewConfigs?.active || {};
-                const completedConfig = saved.viewConfigs?.completed || {};
-                const deletedConfig = saved.viewConfigs?.deleted || {};
-
-                return {
-                    ...defaults,
-                    ...saved,
-                    viewConfigs: {
-                        active: { ...defaultViewConfig, ...activeConfig, headerBackgroundImage: activeConfig.headerBackgroundImage || '', cardBorderColor: activeConfig.cardBorderColor || '#e2e8f0' },
-                        completed: { ...defaultViewConfig, ...completedConfig, headerBackgroundImage: completedConfig.headerBackgroundImage || '', cardBorderColor: completedConfig.cardBorderColor || '#e2e8f0' },
-                        deleted: { ...defaultViewConfig, ...deletedConfig, headerBackgroundImage: deletedConfig.headerBackgroundImage || '', cardBorderColor: deletedConfig.cardBorderColor || '#e2e8f0' },
-                    }
-                };
             });
-
-            // Background History State
-            const [bgHistory, setBgHistory] = useState(() => JSON.parse(localStorage.getItem('wallet_bg_history_v3')) || []);
-
+            const [bgHistory, setBgHistory] = useState([]);
             const [showSettings, setShowSettings] = useState(false);
             const [showTagManager, setShowTagManager] = useState(false);
-            
-            // [CR-IMPL] 修改: 重新加入 try-catch 攔截 QuotaExceededError 並加入自動清理邏輯
+
+            const [isDataLoaded, setIsDataLoaded] = useState(false);
+
             useEffect(() => {
-                try {
-                    localStorage.setItem('wallet_tasks_v3', JSON.stringify(tasks));
-                    setIsStorageFull(false);
-                } catch (e) {
-                    if (e.name === 'QuotaExceededError') {
-                        setIsStorageFull(true);
-                        setStorageAlert("儲存空間已滿！無法儲存票券資料。");
-                        // 嘗試清理背景歷史以騰出空間
-                        if (bgHistory.length > 0) {
-                            setBgHistory([]);
-                            localStorage.removeItem('wallet_bg_history_v3');
-                            setStorageAlert("空間接近上限，已自動清理背景紀錄。");
+                const initData = async () => {
+                    try {
+                        await dbHelper.init();
+                        
+                        const keys = ['wallet_tasks_v3', 'wallet_settings_v3', 'wallet_bg_history_v3'];
+                        for (const key of keys) {
+                            const localData = localStorage.getItem(key);
+                            if (localData) {
+                                const parsed = JSON.parse(localData);
+                                await dbHelper.setItem(key, parsed);
+                                localStorage.removeItem(key); 
+                            }
                         }
+
+                        const dbTasks = await dbHelper.getItem('wallet_tasks_v3');
+                        const dbSettings = await dbHelper.getItem('wallet_settings_v3');
+                        const dbBgHistory = await dbHelper.getItem('wallet_bg_history_v3');
+
+                        if (dbTasks) setTasks(dbTasks);
+                        if (dbSettings) {
+                            // [CR-IMPL] 修改: 資料初始化遷移，若 bgSize 為非數值 (如 'cover') 則重置為 100
+                            const migrateConfig = (config) => ({
+                                ...defaultViewConfig,
+                                ...config,
+                                bgSize: typeof config?.bgSize === 'number' ? config.bgSize : 100,
+                                bgPosY: typeof config?.bgPosY === 'number' ? config.bgPosY : 50
+                            });
+
+                            const mergedSettings = {
+                                ...settings,
+                                ...dbSettings,
+                                viewConfigs: {
+                                    active: migrateConfig(dbSettings.viewConfigs?.active),
+                                    completed: migrateConfig(dbSettings.viewConfigs?.completed),
+                                    deleted: migrateConfig(dbSettings.viewConfigs?.deleted),
+                                }
+                            };
+                            setSettings(mergedSettings);
+                        }
+                        if (dbBgHistory) setBgHistory(dbBgHistory);
+
+                        setIsDataLoaded(true);
+                    } catch (err) {
+                        console.error("Database initialization failed:", err);
                     }
-                }
-            }, [tasks]);
+                };
+                initData();
+            }, []);
 
             useEffect(() => {
-                try {
-                    localStorage.setItem('wallet_settings_v3', JSON.stringify(settings));
-                    setIsStorageFull(false);
-                } catch (e) {
-                    if (e.name === 'QuotaExceededError') {
-                        setIsStorageFull(true);
-                        setStorageAlert("空間不足，無法儲存設定與背景圖片。");
-                    }
-                }
-            }, [settings]);
+                if (!isDataLoaded) return;
+                dbHelper.setItem('wallet_tasks_v3', tasks).catch(e => console.error("Save tasks failed:", e));
+            }, [tasks, isDataLoaded]);
 
             useEffect(() => {
-                try {
-                    localStorage.setItem('wallet_bg_history_v3', JSON.stringify(bgHistory));
-                } catch (e) {
-                    // 背景歷史屬非核心資料，若空間不足則安靜失敗，不顯示白屏
-                    console.warn("Storage full: Could not save bg history");
-                }
-            }, [bgHistory]);
+                if (!isDataLoaded) return;
+                dbHelper.setItem('wallet_settings_v3', settings).catch(e => console.error("Save settings failed:", e));
+            }, [settings, isDataLoaded]);
 
-            // Notification Check
+            useEffect(() => {
+                if (!isDataLoaded) return;
+                dbHelper.setItem('wallet_bg_history_v3', bgHistory).catch(e => console.error("Save history failed:", e));
+            }, [bgHistory, isDataLoaded]);
+
             useEffect(() => {
                 const checkNotifications = async () => {
-                    if (settings.tgToken && settings.tgChatId && tasks.length > 0) {
+                    if (isDataLoaded && settings.tgToken && settings.tgChatId && tasks.length > 0) {
                         const todayStr = new Date().toISOString().split('T')[0];
                         const lastCheckKey = 'last_notify_date_v3';
                         if (localStorage.getItem(lastCheckKey) !== todayStr) {
                             const expiring = tasks.filter(t => !t.completed && !t.isDeleted && checkIsExpiringSoon(t.expiry, settings.notifyDays));
                             if (expiring.length > 0) {
-                                let msg = `⚠️ *[${settings.appTitle}] 到期提醒 (${expiring.length}筆)*\n設定: ${settings.notifyDays} 天內\n\n`;
+                                let msg = `⚠️ *[${settings.appTitle}] 到期提醒 (${expiring.length}筆)*\n\n`;
                                 expiring.slice(0, 10).forEach(t => {
-                                    const tagStr = t.tags && t.tags.length > 0 ? ` [${t.tags.join(', ')}]` : '';
-                                    const serialInfo = t.serial ? ` (序號: ${t.serial})` : '';
-                                    msg += `🔸 ${t.productName} (${t.expiry})${serialInfo}${tagStr}\n`;
+                                    msg += `🔸 ${t.productName} (${t.expiry || '無'})\n`;
                                 });
-                                if(expiring.length > 10) msg += `...等共 ${expiring.length} 筆`;
                                 const result = await sendTelegramMessage(settings.tgToken, settings.tgChatId, msg);
                                 if(result.success) {
                                     localStorage.setItem(lastCheckKey, todayStr);
@@ -1394,11 +1369,10 @@
                     }
                 };
                 checkNotifications();
-            }, [tasks, settings]);
+            }, [tasks, settings, isDataLoaded]);
 
             const allTags = useMemo(() => [...new Set(tasks.flatMap(t => t.tags || []))], [tasks]);
 
-            // 3. Duplicate Logic: Identify duplicates
             const duplicateSerials = useMemo(() => {
                 const counts = {};
                 tasks.forEach(t => {
@@ -1459,10 +1433,7 @@
                 setTasks(prev => prev.map(t => t.id === ticket.id ? { ...t, completed: newStatus, completedAt: completedAt } : t));
                 
                 if (newStatus && settings.tgToken && settings.tgChatId) {
-                   const tagStr = ticket.tags && ticket.tags.length > 0 ? ` [${ticket.tags.join(', ')}]` : '';
-                   const serialStr = ticket.serial ? `\n🔢 序號: \`${ticket.serial}\`` : '';
-                   const timeStr = `\n⏰ 時間: ${formatDateTime(completedAt)}`;
-                   const msg = `✅ *[已核銷]* ${ticket.productName}\n📅 期限: ${ticket.expiry || '無'}${serialStr}${timeStr}${tagStr}`;
+                   const msg = `✅ *[已核銷]* ${ticket.productName}\n📅 期限: ${ticket.expiry || '無'}\n⏰ 時間: ${formatDateTime(completedAt)}`;
                    sendTelegramMessage(settings.tgToken, settings.tgChatId, msg).catch(e => console.error(e));
                 }
             };
@@ -1484,7 +1455,7 @@
                     tasks: tasks
                 };
                 const blob = new Blob([JSON.stringify(backupData, null, 2)], {type: "application/json"});
-                const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `ticket_backup_full_${new Date().toISOString().split('T')[0]}.json`; a.click();
+                const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `ticket_backup_idb_${new Date().toISOString().split('T')[0]}.json`; a.click();
             };
             
             const handleImport = () => {
@@ -1495,38 +1466,22 @@
                         try { 
                             const data = JSON.parse(ev.target.result);
                             const importedTasks = Array.isArray(data) ? data : (data.tasks || []);
-                            
-                            let confirmSettings = false;
-                            if (!Array.isArray(data) && data.settings) {
-                                if (confirm("備份檔包含設定資料 (APP標題、Telegram Token、背景圖 等)，是否一併還原？")) {
-                                    setSettings(prev => ({...prev, ...data.settings}));
-                                    confirmSettings = true;
-                                }
+                            if (confirm("是否覆蓋現有票券與設定？")) {
+                                if (data.settings) setSettings(data.settings);
+                                setTasks(importedTasks);
+                                alert(`匯入成功！共 ${importedTasks.length} 筆票券。`);
                             }
-                            
-                            const mode = prompt("請選擇匯入模式：\n1. 添加 (保留現有資料並新增)\n2. 覆蓋 (清空現有資料後匯入)", "1");
-                            
-                            if (mode === '1') {
-                                setTasks(prev => [...prev, ...importedTasks]);
-                                alert(`匯入成功 (添加模式)！新增 ${importedTasks.length} 筆票券${confirmSettings ? ' (含設定)' : ''}`);
-                            } else if (mode === '2') {
-                                if(confirm("確定要覆蓋嗎？現有資料將會遺失！")) {
-                                    setTasks(importedTasks);
-                                    alert(`匯入成功 (覆蓋模式)！共 ${importedTasks.length} 筆票券${confirmSettings ? ' (含設定)' : ''}`);
-                                }
-                            }
-
                         } catch(e){alert("格式錯誤");} 
                     };
                     r.readAsText(e.target.files[0]);
                 }; input.click();
             };
 
-            const handleFullReset = () => {
+            const handleFullReset = async () => {
                 if (window.confirm("⚠️ 注意：這將刪除所有票券、設定與背景紀錄，且無法復原。確定要徹底重設嗎？")) {
-                    localStorage.removeItem('wallet_tasks_v3');
-                    localStorage.removeItem('wallet_settings_v3');
-                    localStorage.removeItem('wallet_bg_history_v3');
+                    await dbHelper.removeItem('wallet_tasks_v3');
+                    await dbHelper.removeItem('wallet_settings_v3');
+                    await dbHelper.removeItem('wallet_bg_history_v3');
                     localStorage.removeItem('last_notify_date_v3');
                     window.location.reload();
                 }
@@ -1610,31 +1565,28 @@
                 }));
             };
 
+            if (!isDataLoaded) {
+                return (
+                    <div className="fixed inset-0 bg-slate-50 flex flex-col items-center justify-center gap-4">
+                        <Loader2 className="w-12 h-12 text-sky-500 animate-spin" />
+                        <p className="text-slate-400 font-bold animate-pulse">正在載入資料庫...</p>
+                    </div>
+                );
+            }
+
             const currentConfig = settings.viewConfigs[view] || defaultViewConfig;
 
             return (
                 <>
-                    {/* [CR-IMPL] 新增: 儲存空間不足提示組件 */}
-                    {isStorageFull && (
-                        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] w-[90%] max-w-sm animate-bounce-sm">
-                            <div className="bg-red-600/90 backdrop-blur-md text-white px-4 py-3 rounded-2xl shadow-2xl border border-white/20 flex items-center gap-3">
-                                <AlertTriangle size={20} className="flex-shrink-0" />
-                                <span className="text-xs font-bold leading-tight">{storageAlert}</span>
-                                <button onClick={() => setIsStorageFull(false)} className="p-1 hover:bg-white/20 rounded-lg">
-                                    <X size={14} />
-                                </button>
-                            </div>
-                        </div>
-                    )}
-
                     {currentConfig.backgroundImage && (
                         <div 
                             className="fixed inset-0 z-0 mx-auto max-w-md transition-all duration-500"
                             style={{
                                 top: '190px',
                                 backgroundImage: `url(${currentConfig.backgroundImage})`,
-                                backgroundSize: 'auto', 
-                                backgroundPosition: 'center top',
+                                // [CR-IMPL] 修改: 連動 bgSize (寬度) 與 bgPosY (垂直位置) 樣式
+                                backgroundSize: `${currentConfig.bgSize || 100}% auto`, 
+                                backgroundPosition: `center ${currentConfig.bgPosY || 50}%`,
                                 backgroundRepeat: 'no-repeat',
                             }}
                         />
