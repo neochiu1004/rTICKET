@@ -322,8 +322,15 @@
             return <canvas ref={canvasRef} className="max-w-full h-auto rounded-lg shadow-sm border border-slate-100 bg-white p-1" />;
         };
 
-        const TagSelectInput = ({ allTags, selectedTags, onTagsChange }) => {
+        // [CR-IMPL] Update TagSelectInput: Accept extraSuggestions prop
+        const TagSelectInput = ({ allTags, selectedTags, onTagsChange, extraSuggestions = [] }) => {
             const [inputVal, setInputVal] = useState('');
+            
+            // [CR-IMPL] Merge tags and extra suggestions (keywords)
+            const availableSuggestions = useMemo(() => {
+                return [...new Set([...allTags, ...extraSuggestions])];
+            }, [allTags, extraSuggestions]);
+
             const handleAdd = (tag) => {
                 if(!selectedTags.includes(tag)) onTagsChange([...selectedTags, tag]);
                 setInputVal('');
@@ -347,14 +354,15 @@
                         <button onClick={() => inputVal.trim() && handleAdd(inputVal.trim())} className="bg-sky-500 text-white p-3 rounded-xl hover:bg-sky-600 transition-colors"><Plus size={18}/></button>
                         {inputVal && (
                             <div className="absolute top-full mt-2 w-full bg-white border border-slate-100 rounded-xl shadow-xl z-20 max-h-32 overflow-y-auto">
-                                {allTags.filter(t => t.includes(inputVal) && !selectedTags.includes(t)).map(t => (
+                                {availableSuggestions.filter(t => t.includes(inputVal) && !selectedTags.includes(t)).map(t => (
                                     <button key={t} onClick={() => handleAdd(t)} className="w-full text-left px-4 py-3 text-sm hover:bg-slate-50 font-medium text-slate-600">{t}</button>
                                 ))}
                             </div>
                         )}
                     </div>
+                    {/* [CR-IMPL] Show suggested tags including keywords */}
                     <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
-                        {allTags.filter(t => !selectedTags.includes(t)).slice(0, 5).map(t => (
+                        {availableSuggestions.filter(t => !selectedTags.includes(t)).slice(0, 8).map(t => (
                             <button key={t} onClick={() => handleAdd(t)} className="text-xs font-bold bg-slate-100 text-slate-500 px-3 py-1.5 rounded-full whitespace-nowrap hover:bg-slate-200 transition-colors">+ {t}</button>
                         ))}
                     </div>
@@ -480,11 +488,10 @@
                                 <input type="number" value={localSettings.notifyDays} onChange={e => handleGlobalChange('notifyDays', e.target.value)} className="w-full p-3 bg-slate-50 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-sky-400"/>
                             </div>
 
-                            {/* [CR-IMPL] 新增特定畫面關鍵字設定 */}
                             <div className="border-t border-slate-100 pt-4">
                                 <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 block">特定畫面觸發關鍵字 (MOMO模式)</label>
                                 <div className="flex gap-2 mb-3">
-                                    <input value={newKw} onChange={e => setNewKw(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddKw()} placeholder="輸入關鍵字 (如: MOMO, 餐券)..." className="flex-1 p-2 bg-slate-50 rounded-lg text-sm outline-none border-none focus:ring-1 focus:ring-sky-400"/>
+                                    <input value={newKw} onChange={e => setNewKw(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddKw()} placeholder="輸入關鍵字 (如: MOMO, 85度C)..." className="flex-1 p-2 bg-slate-50 rounded-lg text-sm outline-none border-none focus:ring-1 focus:ring-sky-400"/>
                                     <button onClick={handleAddKw} className="px-4 bg-sky-500 text-white rounded-lg font-bold"><Plus size={18}/></button>
                                 </div>
                                 <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto no-scrollbar">
@@ -493,7 +500,7 @@
                                             {kw} <X size={10} className="cursor-pointer hover:text-red-500" onClick={() => handleRemoveKw(kw)}/>
                                         </span>
                                     ))}
-                                    {(!localSettings.specificViewKeywords || localSettings.specificViewKeywords.length === 0) && <span className="text-[10px] text-slate-300">預設：MOMO</span>}
+                                    {(!localSettings.specificViewKeywords || localSettings.specificViewKeywords.length === 0) && <span className="text-[10px] text-slate-300">預設：MOMO, 85度C</span>}
                                 </div>
                             </div>
                             
@@ -719,7 +726,6 @@
             );
         };
 
-        // [CR-IMPL] 新增 DataActionsModal (取代原 Prompt 選單)
         const DataActionsModal = ({ isOpen, onClose, onBackup, onImportClick, onReset }) => {
             if (!isOpen) return null;
             return (
@@ -741,7 +747,6 @@
             );
         };
 
-        // [CR-IMPL] 新增 ImportConfirmModal (優化匯入確認)
         const ImportConfirmModal = ({ isOpen, data, onConfirm, onCancel }) => {
             if (!isOpen || !data) return null;
             const [mode, setMode] = useState('append');
@@ -1024,9 +1029,8 @@
             const [editTags, setEditTags] = useState(ticket.tags || []);
             const [editImage, setEditImage] = useState(ticket.image || '');
             
-            // [CR-IMPL] 更新判斷邏輯：根據設定的關鍵字觸發 MOMO 模式
             const isSpecificView = useMemo(() => {
-                const keywords = (specificViewKeywords && specificViewKeywords.length > 0) ? specificViewKeywords : ['MOMO'];
+                const keywords = (specificViewKeywords && specificViewKeywords.length > 0) ? specificViewKeywords : ['MOMO', '85度C'];
                 const searchTarget = (ticket.productName + (ticket.tags || []).join('')).toUpperCase();
                 return keywords.some(kw => searchTarget.includes(kw.toUpperCase()));
             }, [ticket, specificViewKeywords]);
@@ -1066,8 +1070,12 @@
                                 )}
                                 {isEditing && (
                                     <div className="mt-2 text-left space-y-3 bg-slate-50 p-4 rounded-2xl">
-                                        <div><label className="text-[10px] font-bold text-slate-400 uppercase">封面</label><div className="flex items-center gap-3 mt-1">{editImage ? <img src={editImage} className="w-12 h-12 object-cover rounded-lg border border-slate-200"/> : <div className="w-12 h-12 bg-white border border-dashed border-slate-300 rounded-lg flex items-center justify-center"><ImageIcon size={16} className="text-slate-300"/></div>}<label className="px-3 py-1 bg-sky-100 text-sky-600 text-[10px] font-bold rounded-md cursor-pointer">上傳 <input type="file" accept="image/*" onChange={handleImageChange} className="hidden"/></label></div></div>
-                                        <div><label className="text-[10px] font-bold text-slate-400 uppercase">標籤</label><TagSelectInput allTags={allTags} selectedTags={editTags} onTagsChange={setEditTags} /></div>
+                                        <div><label className="text-[10px] font-bold text-slate-400 uppercase">封面</label><div className="flex items-center gap-3 mt-1">{editImage ? <img src={editImage} className="w-12 h-12 object-cover rounded-lg border border-slate-200"/> : <div className="w-12 h-12 bg-white border border-dashed border-slate-300 rounded-lg flex items-center justify-center"><ImageIcon size={16} className="text-slate-300"/></div>}<label className="px-3 py-1 bg-sky-100 text-sky-600 text-[10px] font-bold rounded-md cursor-pointer">上傳 <input type="file" accept="image/*" onChange={async e => {
+                                                const file = e.target.files[0];
+                                                if(file) { const base64 = await compressImage(file); setEditImage(base64); }
+                                            }} className="hidden"/></label></div></div>
+                                        {/* [CR-IMPL] Pass extraSuggestions */}
+                                        <div><label className="text-[10px] font-bold text-slate-400 uppercase">標籤</label><TagSelectInput allTags={allTags} selectedTags={editTags} onTagsChange={setEditTags} extraSuggestions={specificViewKeywords} /></div>
                                     </div>
                                 )}
                             </div>
@@ -1105,10 +1113,10 @@
                                     <div className="flex gap-2"><button onClick={()=>setIsEditing(false)} className="flex-1 py-3 bg-slate-100 text-slate-500 rounded-xl font-bold text-sm">取消</button><button onClick={handleSave} className="flex-1 py-3 bg-sky-500 text-white rounded-xl font-bold text-sm shadow-lg shadow-sky-100">儲存變更</button></div>
                                 ) : (
                                     <>
-                                        {!ticket.isDeleted && <button onClick={() => { if(ticket.completed) { onToggleComplete(ticket); onClose(); } else if(window.confirm("確定核銷？")) { onToggleComplete(ticket); onClose(); } }} className="w-full py-4 text-base font-black rounded-2xl shadow-xl flex items-center justify-center gap-2 text-white bg-emerald-500 hover:bg-emerald-600 transition-all active:scale-95">{ticket.completed ? <><RotateCcw size={20}/> 標記未用</> : <><CheckCircle2 size={20}/> 立即核銷</>}</button>}
+                                        {!ticket.isDeleted && <button onClick={() => { if(ticket.completed || window.confirm("確定核銷？")) { onToggleComplete(ticket); onClose(); } }} className="w-full py-4 text-base font-black rounded-2xl shadow-xl flex items-center justify-center gap-2 text-white bg-emerald-500 hover:bg-emerald-600 transition-all active:scale-95">{ticket.completed ? <><RotateCcw size={20}/> 標記未用</> : <><CheckCircle2 size={20}/> 立即核銷</>}</button>}
                                         <div className="flex gap-2 h-11">
                                             {ticket.isDeleted ? <button onClick={() => { onRestore(ticket); onClose(); }} className="flex-1 bg-emerald-50 text-emerald-600 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5"><RefreshCcw size={14}/> 還原</button> : <button onClick={() => setIsEditing(true)} className="flex-1 bg-slate-50 text-slate-500 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 border border-slate-100"><Pencil size={14}/> 編輯</button>}
-                                            <button onClick={() => { onDelete(ticket.id); onClose(); }} className="flex-1 bg-red-50 text-red-500 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5"><Trash2 size={14}/> 刪除</button>
+                                            <button onClick={() => { if(ticket.isDeleted ? confirm("永久刪除？") : true) { onDelete(ticket.id); onClose(); } }} className="flex-1 bg-red-50 text-red-500 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5"><Trash2 size={14}/> 刪除</button>
                                             <button onClick={onClose} className="w-11 bg-slate-100 text-slate-500 rounded-xl flex items-center justify-center"><X size={18}/></button>
                                         </div>
                                     </>
@@ -1117,12 +1125,20 @@
                         </div>
                     </div>
                 </div>
-                {showFullScreen && ticket.image && <div className="fixed inset-0 z-[60] bg-black flex items-center justify-center p-2 fullscreen-overlay" onClick={() => setShowFullScreen(false)}><img src={ticket.image} className="max-w-full max-h-full object-contain" /><button className="absolute top-4 right-4 w-10 h-10 bg-slate-900/60 text-white rounded-full flex items-center justify-center backdrop-blur-md border border-white/40"><X size={24}/></button></div>}
+                {/* [CR-IMPL] Improved Close Button Style */}
+                {showFullScreen && ticket.image && (
+                    <div className="fixed inset-0 z-[60] bg-black flex items-center justify-center p-2 fullscreen-overlay" onClick={() => setShowFullScreen(false)}>
+                        <img src={ticket.image} className="max-w-full max-h-full object-contain" />
+                        <button className="absolute top-6 right-6 px-4 py-2 bg-black/60 backdrop-blur-md text-white rounded-full flex items-center gap-2 font-bold shadow-lg border border-white/20 active:scale-95 transition-transform" onClick={(e) => { e.stopPropagation(); setShowFullScreen(false); }}>
+                            <X size={20}/> 關閉
+                        </button>
+                    </div>
+                )}
                 </>
             );
         };
 
-        const AddTicketModal = ({ isOpen, onClose, onAddBatch, allTags }) => {
+        const AddTicketModal = ({ isOpen, onClose, onAddBatch, allTags, specificViewKeywords }) => {
             if (!isOpen) return null;
             const [activeTab, setActiveTab] = useState('smart');
             const [pasteVal, setPasteVal] = useState('');
@@ -1171,7 +1187,8 @@
                             <div className="space-y-3">
                                 <div className="flex items-center gap-3"><div className="w-20 h-20 bg-slate-50 border border-dashed border-slate-300 rounded-2xl flex items-center justify-center relative overflow-hidden">{images.length > 0 ? <img src={images[0]} className="w-full h-full object-cover"/> : <ImageIcon className="text-slate-300"/>}<input type="file" className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" onChange={handleImageUpload}/></div><div className="flex-1 text-xs font-bold text-slate-400">上傳票券照片 (選填)</div></div>
                                 <input className="w-full p-3.5 bg-slate-50 rounded-xl outline-none font-bold" placeholder="票券名稱 (必填)" value={manualData.name} onChange={e=>setManualData({...manualData, name: e.target.value})}/>
-                                <TagSelectInput allTags={allTags} selectedTags={manualTags} onTagsChange={setManualTags} />
+                                {/* [CR-IMPL] Pass extraSuggestions to AddTicketModal's TagInput */}
+                                <TagSelectInput allTags={allTags} selectedTags={manualTags} onTagsChange={setManualTags} extraSuggestions={specificViewKeywords} />
                                 <input className="w-full p-3.5 bg-slate-50 rounded-xl outline-none font-mono text-sm" placeholder="序號/代碼" value={manualData.serial} onChange={e=>setManualData({...manualData, serial: e.target.value})}/>
                                 <input type="date" className="w-full p-3.5 bg-slate-50 rounded-xl outline-none" value={manualData.expiry} onChange={e=>setManualData({...manualData, expiry: e.target.value})}/>
                                 <button onClick={handleManualSubmit} className="w-full bg-sky-500 text-white py-3.5 rounded-2xl font-bold shadow-lg">確認新增</button>
@@ -1236,13 +1253,12 @@
             const [selectedIds, setSelectedIds] = useState(new Set());
             const [showBatchModal, setShowBatchModal] = useState(false);
             
-            // [CR-IMPL] 新增 Data Actions Modal 狀態
             const [showDataModal, setShowDataModal] = useState(false);
             const [importPendingData, setImportPendingData] = useState(null);
 
             const [settings, setSettings] = useState({ 
                 tgToken: '', tgChatId: '', notifyDays: 7, appTitle: '我的票夾',
-                specificViewKeywords: ['MOMO'], // [CR-IMPL] 預設關鍵字
+                specificViewKeywords: ['MOMO', '85度C'], // [CR-IMPL] 修正預設值
                 bgConfigMap: {}, 
                 viewConfigs: {
                     active: { ...defaultViewConfig },
@@ -1282,7 +1298,7 @@
                             const mergedSettings = {
                                 ...settings, ...dbSettings,
                                 bgConfigMap: dbSettings.bgConfigMap || {}, 
-                                specificViewKeywords: dbSettings.specificViewKeywords || ['MOMO'], // [CR-IMPL] 載入設定時兼容舊資料
+                                specificViewKeywords: dbSettings.specificViewKeywords || ['MOMO', '85度C'], // [CR-IMPL] 載入舊資料時若無欄位則補上預設
                                 viewConfigs: {
                                     active: migrateConfig(dbSettings.viewConfigs?.active),
                                     completed: migrateConfig(dbSettings.viewConfigs?.completed),
@@ -1393,7 +1409,6 @@
                 }; input.click();
             };
 
-            // [CR-IMPL] 執行匯入 (由 ImportConfirmModal 觸發)
             const executeImport = (mode, restoreSettings) => {
                 if (!importPendingData) return;
                 const importedTasks = Array.isArray(importPendingData) ? importPendingData : (importPendingData.tasks || []);
@@ -1404,13 +1419,16 @@
                 alert(`匯入成功！共 ${importedTasks.length} 筆票券。`);
             };
 
+            // [CR-IMPL] 實作二次確認重置邏輯
             const handleFullReset = async () => {
                 if (window.confirm("⚠️ 注意：這將刪除所有票券、設定與背景紀錄，且無法復原。確定要徹底重設嗎？")) {
-                    await dbHelper.removeItem('wallet_tasks_v3');
-                    await dbHelper.removeItem('wallet_settings_v3');
-                    await dbHelper.removeItem('wallet_bg_history_v3');
-                    localStorage.removeItem('last_notify_date_v3');
-                    window.location.reload();
+                    if (window.confirm("🔴 再次確認：刪除後資料將無法找回。真的要執行嗎？")) {
+                        await dbHelper.removeItem('wallet_tasks_v3');
+                        await dbHelper.removeItem('wallet_settings_v3');
+                        await dbHelper.removeItem('wallet_bg_history_v3');
+                        localStorage.removeItem('last_notify_date_v3');
+                        window.location.reload();
+                    }
                 }
             };
             
@@ -1448,7 +1466,6 @@
                         <Header 
                             appTitle={settings.appTitle} onTitleChange={(t) => setSettings(s => ({...s, appTitle: t}))}
                             onOpenSettings={() => setShowSettings(true)}
-                            // [CR-IMPL] 修改 Menu 行為：開啟 DataActionsModal
                             onOpenMenu={() => setShowDataModal(true)}
                             sortType={sortType} setSortType={setSortType} searchQuery={searchQuery} setSearchQuery={setSearchQuery} isSelectionMode={isSelectionMode} setIsSelectionMode={setIsSelectionMode} selectedCount={selectedIds.size} onSelectAll={handleSelectAll} isCompact={isCompact} setIsCompact={setIsCompact} view={view} setView={setView} activeTag={activeTag} setActiveTag={setActiveTag} allTags={allTags} onQuickBgChange={handleQuickBgChange} headerBackgroundImage={currentConfig.headerBackgroundImage}
                         />
@@ -1461,13 +1478,12 @@
                             </div>
                         ) : <button onClick={() => setShowAddModal(true)} className="fixed bottom-10 right-5 w-16 h-16 bg-sky-500 text-white rounded-[24px] shadow-2xl flex items-center justify-center text-3xl active:scale-90 transition-transform z-40"><Plus size={32}/></button>}
 
-                        <AddTicketModal isOpen={showAddModal} onClose={() => setShowAddModal(false)} onAddBatch={handleAddBatch} allTags={allTags} />
+                        <AddTicketModal isOpen={showAddModal} onClose={() => setShowAddModal(false)} onAddBatch={handleAddBatch} allTags={allTags} specificViewKeywords={settings.specificViewKeywords} />
                         <RedeemModal ticket={selectedTicket} onClose={() => setSelectedTicket(null)} onToggleComplete={handleToggleComplete} onDelete={handleDelete} onRestore={handleRestore} onUpdate={handleUpdate} allTags={allTags} specificViewKeywords={settings.specificViewKeywords} />
                         <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} settings={settings} bgHistory={bgHistory} onSave={handleSaveSettings} onRemoveHistory={handleRemoveHistory} onAddToHistory={handleAddToHistory} />
                         <TagManagerModal isOpen={showTagManager} onClose={() => setShowTagManager(false)} tags={allTags} onDeleteTag={handleDeleteTag} />
                         <BatchEditModal isOpen={showBatchModal} onClose={() => setShowBatchModal(false)} selectedCount={selectedIds.size} onAddTag={handleBatchAddTag} allTags={allTags} />
                         
-                        {/* [CR-IMPL] 新增的 Modal 元件 */}
                         <DataActionsModal isOpen={showDataModal} onClose={() => setShowDataModal(false)} onBackup={handleBackup} onImportClick={handleImportClick} onReset={handleFullReset} />
                         <ImportConfirmModal isOpen={!!importPendingData} data={importPendingData} onCancel={() => setImportPendingData(null)} onConfirm={executeImport} />
                     </div>
@@ -1480,3 +1496,6 @@
     </script>
 </body>
 </html>
+
+
+
