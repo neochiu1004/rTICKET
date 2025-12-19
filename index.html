@@ -74,7 +74,7 @@
         .ticket-rip-l {
             position: absolute; left: -6px; top: 50%; transform: translateY(-50%);
             width: 12px; height: 12px; border-radius: 50%;
-            background-color: transparent; /* Changed to transparent for custom bg compatibility */
+            background-color: transparent; 
             box-shadow: inset -1px 0 2px rgba(0,0,0,0.05);
             z-index: 10;
         }
@@ -82,7 +82,7 @@
             position: absolute; right: -6px; top: 50%; transform: translateY(-50%);
             width: 12px; height: 12px; border-radius: 50%;
             background-color: transparent;
-            box-shadow: inset 1px 0 2px rgba(0,0,0,0.05);
+            box-shadow: 1px 0 2px rgba(0,0,0,0.05);
             z-index: 10;
         }
         /* Fullscreen Image Overlay Transition */
@@ -387,30 +387,24 @@
                 setLocalSettings(prev => ({ ...prev, [key]: value }));
             };
 
-            // [CR-IMPL] 修改: 更新設定邏輯，加入全域圖片設定共享 (bgConfigMap)
             const handleViewConfigChange = (key, value) => {
                 setLocalSettings(prev => {
                     let next = { ...prev };
                     let currentView = { ...next.viewConfigs[currentTab] };
                     
-                    // 1. 更新目前的視圖欄位
                     currentView[key] = value;
                     
                     const imageUrl = currentView.backgroundImage;
                     
-                    // 2. 初始化映射表
                     if (!next.bgConfigMap) next.bgConfigMap = {};
                     
-                    // 3. 全域共享邏輯
                     if (key === 'backgroundImage' && value) {
-                        // 若切換到一張已有設定的圖，自動套用該圖的全域設定
                         const sharedConfig = next.bgConfigMap[value];
                         if (sharedConfig) {
                             currentView.bgSize = sharedConfig.bgSize;
                             currentView.bgPosY = sharedConfig.bgPosY;
                         }
                     } else if (imageUrl && (key === 'bgSize' || key === 'bgPosY')) {
-                        // 若調整尺寸或位置，同步更新到該圖的全域映射表中
                         next.bgConfigMap[imageUrl] = {
                             ...next.bgConfigMap[imageUrl],
                             [key]: value
@@ -553,11 +547,10 @@
                                         </div>
                                     </div>
 
-                                    {/* [CR-IMPL] 新增: 即時預覽縮圖與滑桿控制項 */}
                                     <div className="bg-slate-50 p-3 rounded-xl space-y-3">
-                                        {/* Preview Area */}
+                                        {/* [CR-IMPL] 修改: 預覽框比例由固定 h-24 改為 aspect-[3/5] 以符合真實背景區域比例 */}
                                         {currentViewConfig.backgroundImage && (
-                                            <div className="w-full h-24 bg-slate-200 rounded-xl border border-slate-300 relative overflow-hidden flex items-center justify-center">
+                                            <div className="w-32 aspect-[3/5] mx-auto bg-slate-200 rounded-xl border border-slate-300 relative overflow-hidden flex items-center justify-center shadow-inner">
                                                 <div 
                                                     className="absolute inset-0 w-full h-full pointer-events-none transition-all duration-75"
                                                     style={{
@@ -568,7 +561,7 @@
                                                     }}
                                                 />
                                                 <div className="absolute top-1 right-1 bg-black/40 backdrop-blur-sm text-white text-[9px] px-1.5 py-0.5 rounded-lg font-bold flex items-center gap-1 shadow-sm">
-                                                    <PreviewIcon size={8}/> 調整預覽
+                                                    <PreviewIcon size={8}/> 預覽
                                                 </div>
                                             </div>
                                         )}
@@ -1310,7 +1303,7 @@
             const [showBatchModal, setShowBatchModal] = useState(false);
             const [settings, setSettings] = useState({ 
                 tgToken: '', tgChatId: '', notifyDays: 7, appTitle: '我的票夾',
-                bgConfigMap: {}, // [CR-IMPL] 新增: 全域圖片設定映射表
+                bgConfigMap: {}, 
                 viewConfigs: {
                     active: { ...defaultViewConfig },
                     completed: { ...defaultViewConfig },
@@ -1354,7 +1347,7 @@
                             const mergedSettings = {
                                 ...settings,
                                 ...dbSettings,
-                                bgConfigMap: dbSettings.bgConfigMap || {}, // [CR-IMPL] 初始化映射表
+                                bgConfigMap: dbSettings.bgConfigMap || {}, 
                                 viewConfigs: {
                                     active: migrateConfig(dbSettings.viewConfigs?.active),
                                     completed: migrateConfig(dbSettings.viewConfigs?.completed),
@@ -1570,9 +1563,28 @@
                 }
             };
             
+            // [CR-IMPL] 修改: handleRemoveHistory 邏輯，刪除圖片時自動檢查並清空分頁中的背景使用，阻斷自動收集循環
             const handleRemoveHistory = (url) => {
-                if(confirm("確定要移除此背景紀錄嗎？")) {
+                const isUsed = Object.values(settings.viewConfigs).some(config => config.backgroundImage === url);
+                const confirmMsg = isUsed 
+                    ? "此圖片正在使用中，移除後背景將還原為純色。確定要移除此背景紀錄嗎？" 
+                    : "確定要移除此背景紀錄嗎？";
+
+                if(confirm(confirmMsg)) {
                     setBgHistory(prev => prev.filter(item => item !== url));
+                    
+                    // 若有分頁使用中，一併清空以防止 handleSaveSettings 時再次被加入歷史
+                    if (isUsed) {
+                        setSettings(prev => {
+                            const next = { ...prev };
+                            Object.keys(next.viewConfigs).forEach(viewKey => {
+                                if (next.viewConfigs[viewKey].backgroundImage === url) {
+                                    next.viewConfigs[viewKey].backgroundImage = '';
+                                }
+                            });
+                            return next;
+                        });
+                    }
                 }
             };
 
@@ -1593,7 +1605,6 @@
                 const nextIndex = (currentIndex + 1) % history.length;
                 const nextBg = history[nextIndex];
 
-                // [CR-IMPL] 切換背景時同樣套用全域共享邏輯
                 setSettings(prev => {
                     let next = { ...prev };
                     let currentView = { ...next.viewConfigs[view] };
