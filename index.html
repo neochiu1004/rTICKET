@@ -371,6 +371,7 @@
             backgroundImage: '', 
             headerBackgroundImage: '', 
             cardOpacity: 0.95, 
+            bgOpacity: 1, // [CR-IMPL] 新增背景透明度預設值
             bgPosY: 50, 
             bgSize: 100,
             cardBgColor: '#ffffff',
@@ -610,7 +611,8 @@
                                                         backgroundImage: `url(${currentViewConfig.backgroundImage})`,
                                                         backgroundSize: `${currentViewConfig.bgSize || 100}% auto`,
                                                         backgroundPosition: `center ${currentViewConfig.bgPosY || 50}%`,
-                                                        backgroundRepeat: 'no-repeat'
+                                                        backgroundRepeat: 'no-repeat',
+                                                        opacity: currentViewConfig.bgOpacity || 1 // [CR-IMPL] 預覽區也支援透明度
                                                     }}
                                                 />
                                                 <div className="absolute top-1 right-1 bg-black/40 backdrop-blur-sm text-white text-[9px] px-1.5 py-0.5 rounded-lg font-bold flex items-center gap-1 shadow-sm">
@@ -650,6 +652,24 @@
                                                     className="flex-1 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-sky-500"
                                                 />
                                                 <button onClick={() => handleStep('bgPosY', 1, 0, 100, true, 1)} className="w-8 h-8 flex items-center justify-center bg-white border border-slate-200 rounded-lg text-slate-400 hover:text-sky-500 hover:border-sky-200 transition-all"><Plus size={14}/></button>
+                                            </div>
+                                        </div>
+
+                                        {/* [CR-IMPL] 新增背景透明度控制項 */}
+                                        <div>
+                                            <div className="flex justify-between items-center mb-2">
+                                                <label className="text-xs font-bold text-slate-500 flex items-center gap-1"><Droplets size={12}/> 背景透明度</label>
+                                                <span className="text-xs font-bold text-sky-600">{Math.round((currentViewConfig.bgOpacity || 1) * 100)}%</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <button onClick={() => handleStep('bgOpacity', -1, 0, 1, true, 0.05)} className="w-8 h-8 flex items-center justify-center bg-white border border-slate-200 rounded-lg text-slate-400 hover:text-sky-500 hover:border-sky-200 transition-all"><Minus size={14}/></button>
+                                                <input 
+                                                    type="range" min="0" max="100" step="5" 
+                                                    value={Math.round((currentViewConfig.bgOpacity || 1) * 100)} 
+                                                    onChange={(e) => handleViewConfigChange('bgOpacity', (parseInt(e.target.value) / 100))}
+                                                    className="flex-1 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-sky-500"
+                                                />
+                                                <button onClick={() => handleStep('bgOpacity', 1, 0, 1, true, 0.05)} className="w-8 h-8 flex items-center justify-center bg-white border border-slate-200 rounded-lg text-slate-400 hover:text-sky-500 hover:border-sky-200 transition-all"><Plus size={14}/></button>
                                             </div>
                                         </div>
                                     </div>
@@ -825,7 +845,6 @@
             isCompact, setIsCompact, view, setView, activeTag, setActiveTag, allTags,
             onQuickBgChange, headerBackgroundImage 
         }) => (
-            // [CR-UI] Header 空間精簡化：縮減 pt-12 為 pt-8，pb-4 為 pb-3，px-5 為 px-4
             <div 
                 className="px-4 pt-8 pb-3 shadow-sm sticky top-0 z-40 transition-all rounded-b-[24px] bg-white text-slate-800"
                 style={{
@@ -874,12 +893,10 @@
                     </div>
                 </div>
                 
-                {/* [CR-UI] 垂直間隙壓縮：gap-3 改為 gap-2 */}
                 <div className="flex flex-col gap-2">
                     <div className="flex gap-2">
                         <div className="relative flex-1 group">
                             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-sky-500 transition-colors" />
-                            {/* [CR-UI] 搜尋框精簡：py-2.5 改為 py-2 */}
                             <input 
                                 value={searchQuery}
                                 onChange={e => setSearchQuery(e.target.value)}
@@ -1329,7 +1346,8 @@
             const migrateConfig = (config) => ({
                 ...defaultViewConfig, ...config,
                 bgSize: typeof config?.bgSize === 'number' ? config.bgSize : 100,
-                bgPosY: typeof config?.bgPosY === 'number' ? config.bgPosY : 50
+                bgPosY: typeof config?.bgPosY === 'number' ? config.bgPosY : 50,
+                bgOpacity: typeof config?.bgOpacity === 'number' ? config.bgOpacity : 1 // [CR-IMPL] 新增欄位遷移
             });
 
             useEffect(() => {
@@ -1529,8 +1547,8 @@
 
             return (
                 <>
-                    {/* [CR-UI] 背景定位對齊：將 top 修改為 '150px' 以對齊精簡後的 Header 底緣 */}
-                    {currentConfig.backgroundImage && <div className="fixed inset-0 z-0 mx-auto max-w-md transition-all duration-500" style={{ top: '150px', backgroundImage: `url(${currentConfig.backgroundImage})`, backgroundSize: `${currentConfig.bgSize || 100}% auto`, backgroundPosition: `center ${currentConfig.bgPosY || 50}%`, backgroundRepeat: 'no-repeat' }} />}
+                    {/* [CR-IMPL] 背景圖層應用透明度樣式：opacity: currentConfig.bgOpacity */}
+                    {currentConfig.backgroundImage && <div className="fixed inset-0 z-0 mx-auto max-w-md transition-all duration-500" style={{ top: '150px', backgroundImage: `url(${currentConfig.backgroundImage})`, backgroundSize: `${currentConfig.bgSize || 100}% auto`, backgroundPosition: `center ${currentConfig.bgPosY || 50}%`, backgroundRepeat: 'no-repeat', opacity: currentConfig.bgOpacity || 1 }} />}
                     
                     <div className="max-w-md mx-auto min-h-screen relative shadow-2xl sm:border-x border-slate-200 transition-all duration-500 z-10" style={{ backgroundColor: currentConfig.backgroundImage ? 'transparent' : '#f8fafc' }}>
                         <Header 
