@@ -326,7 +326,8 @@
             const [inputVal, setInputVal] = useState('');
             
             const availableSuggestions = useMemo(() => {
-                return [...new Set([...allTags, ...extraSuggestions])];
+                // [CR-FUNC] 修正：若 extraSuggestions 係 undefined (匯入時缺失)，解構會導致崩潰
+                return [...new Set([...allTags, ...(extraSuggestions || [])])];
             }, [allTags, extraSuggestions]);
 
             const handleAdd = (tag) => {
@@ -1072,6 +1073,16 @@
                                                 const file = e.target.files[0];
                                                 if(file) { const base64 = await compressImage(file); setEditImage(base64); }
                                             }} className="hidden"/></label></div></div>
+                                        {/* [CR-UI] 編輯模式補齊：新增兌換期限編輯 */}
+                                        <div>
+                                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">兌換期限</label>
+                                            <input 
+                                                type="date" 
+                                                className="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none text-sm font-bold text-slate-600" 
+                                                value={editExpiry ? editExpiry.replace(/\//g, '-') : ''} 
+                                                onChange={e => setEditExpiry(e.target.value)}
+                                            />
+                                        </div>
                                         <div><label className="text-[10px] font-bold text-slate-400 uppercase">標籤</label><TagSelectInput allTags={allTags} selectedTags={editTags} onTagsChange={setEditTags} extraSuggestions={specificViewKeywords} /></div>
                                     </div>
                                 )}
@@ -1090,7 +1101,6 @@
                                     <div className="flex-1 min-h-0">
                                         {viewMode === 'image' ? (
                                             <div className="h-full flex flex-col items-center gap-3 relative group">
-                                                {/* [CR-UI] 原圖模式新增頂部導覽按鈕 */}
                                                 <button onClick={onClose} className="absolute top-2 right-2 z-10 w-8 h-8 bg-black/50 backdrop-blur-md text-white rounded-full flex items-center justify-center shadow-lg transition-transform active:scale-90">
                                                     <X size={18}/>
                                                 </button>
@@ -1198,7 +1208,6 @@
                                 <input className="w-full p-3.5 bg-slate-50 rounded-xl outline-none font-bold" placeholder="票券名稱 (必填)" value={manualData.name} onChange={e=>setManualData({...manualData, name: e.target.value})}/>
                                 <TagSelectInput allTags={allTags} selectedTags={manualTags} onTagsChange={setManualTags} extraSuggestions={specificViewKeywords} />
                                 <input className="w-full p-3.5 bg-slate-50 rounded-xl outline-none font-mono text-sm" placeholder="序號/代碼" value={manualData.serial} onChange={e=>setManualData({...manualData, serial: e.target.value})}/>
-                                {/* [CR-UI] 手動輸入優化：新增標籤與樣式統一 */}
                                 <div className="space-y-1">
                                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">兌換期限</label>
                                     <input type="date" className="w-full p-3.5 bg-slate-50 rounded-xl outline-none text-sm font-bold text-slate-600" value={manualData.expiry} onChange={e=>setManualData({...manualData, expiry: e.target.value})}/>
@@ -1283,7 +1292,6 @@
             const [showTagManager, setShowTagManager] = useState(false);
             const [isDataLoaded, setIsDataLoaded] = useState(false);
 
-            // [CR-FUNC] 定義全域遷移邏輯以供初始化與匯入使用
             const migrateConfig = (config) => ({
                 ...defaultViewConfig, ...config,
                 bgSize: typeof config?.bgSize === 'number' ? config.bgSize : 100,
@@ -1403,7 +1411,7 @@
             };
             const handleDelete = (id) => {
                 if(view === 'deleted') { if(confirm("確定永久刪除？")) setTasks(prev => prev.filter(t => t.id !== id)); }
-                else setTasks(prev => prev.map(t => t.id === id ? { ...t, isDeleted: true } : t));
+                else setTasks(prev => prev.map(t => id === t.id ? { ...t, isDeleted: true } : t));
             };
             const handleRestore = (ticket) => setTasks(prev => prev.map(t => t.id === ticket.id ? { ...t, isDeleted: false } : t));
             const handleDeleteTag = (tag) => setTasks(prev => prev.map(t => ({ ...t, tags: (t.tags||[]).filter(tt => tt !== tag) })));
@@ -1427,7 +1435,6 @@
                 if (!importPendingData) return;
                 const importedTasks = Array.isArray(importPendingData) ? importPendingData : (importPendingData.tasks || []);
                 
-                // [CR-FUNC] 匯入資料保護：確保設定物件結構完整，防止白屏
                 if (restoreSettings && importPendingData.settings) {
                     const impSet = importPendingData.settings;
                     setSettings(prev => ({
