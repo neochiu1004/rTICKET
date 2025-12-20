@@ -322,11 +322,9 @@
             return <canvas ref={canvasRef} className="max-w-full h-auto rounded-lg shadow-sm border border-slate-100 bg-white p-1" />;
         };
 
-        // [CR-IMPL] Update TagSelectInput: Accept extraSuggestions prop
         const TagSelectInput = ({ allTags, selectedTags, onTagsChange, extraSuggestions = [] }) => {
             const [inputVal, setInputVal] = useState('');
             
-            // [CR-IMPL] Merge tags and extra suggestions (keywords)
             const availableSuggestions = useMemo(() => {
                 return [...new Set([...allTags, ...extraSuggestions])];
             }, [allTags, extraSuggestions]);
@@ -360,7 +358,6 @@
                             </div>
                         )}
                     </div>
-                    {/* [CR-IMPL] Show suggested tags including keywords */}
                     <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
                         {availableSuggestions.filter(t => !selectedTags.includes(t)).slice(0, 8).map(t => (
                             <button key={t} onClick={() => handleAdd(t)} className="text-xs font-bold bg-slate-100 text-slate-500 px-3 py-1.5 rounded-full whitespace-nowrap hover:bg-slate-200 transition-colors">+ {t}</button>
@@ -490,9 +487,10 @@
 
                             <div className="border-t border-slate-100 pt-4">
                                 <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 block">特定畫面觸發關鍵字 (MOMO模式)</label>
-                                <div className="flex gap-2 mb-3">
-                                    <input value={newKw} onChange={e => setNewKw(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddKw()} placeholder="輸入關鍵字 (如: MOMO, 85度C)..." className="flex-1 p-2 bg-slate-50 rounded-lg text-sm outline-none border-none focus:ring-1 focus:ring-sky-400"/>
-                                    <button onClick={handleAddKw} className="px-4 bg-sky-500 text-white rounded-lg font-bold"><Plus size={18}/></button>
+                                {/* [CR-IMPL] Fix layout issue: Added pr-2 to input container */}
+                                <div className="flex gap-2 mb-3 pr-1">
+                                    <input value={newKw} onChange={e => setNewKw(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddKw()} placeholder="輸入關鍵字 (如: MOMO, 85度C)..." className="flex-1 p-2 bg-slate-50 rounded-lg text-sm outline-none border-none focus:ring-1 focus:ring-sky-400 min-w-0"/>
+                                    <button onClick={handleAddKw} className="px-4 bg-sky-500 text-white rounded-lg font-bold shrink-0"><Plus size={18}/></button>
                                 </div>
                                 <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto no-scrollbar">
                                     {(localSettings.specificViewKeywords || []).map(kw => (
@@ -1002,7 +1000,10 @@
                         <div className="p-3 space-y-3">
                             <div className="flex gap-3">
                                 <div className="w-20 h-20 shrink-0 border border-slate-100 rounded-lg overflow-hidden bg-slate-50 flex items-center justify-center">{ticket.image ? <img src={ticket.image} className="w-full h-full object-cover" /> : <ImageIcon className="text-slate-200" size={24} />}</div>
-                                <div className="flex-1 min-w-0 flex flex-col justify-center"><h2 className="text-[15px] font-black text-slate-800 leading-tight line-clamp-2">{ticket.productName}</h2><div className="mt-1 flex items-baseline gap-2"><span className="text-[11px] font-bold text-slate-400">促銷價:</span><span className="text-lg font-black text-momo-price font-serif">35</span></div></div>
+                                <div className="flex-1 min-w-0 flex flex-col justify-center"><h2 className="text-[15px] font-black text-slate-800 leading-tight line-clamp-2">{ticket.productName}</h2>
+                                {/* [CR-IMPL] Remove hardcoded price */}
+                                {/* <div className="mt-1 flex items-baseline gap-2"><span className="text-[11px] font-bold text-slate-400">促銷價:</span><span className="text-lg font-black text-momo-price font-serif">35</span></div> */}
+                                </div>
                             </div>
                             <div className="relative border-t border-dashed border-slate-200 my-1"><div className="absolute -left-5 -top-1.5 w-3 h-3 bg-white rounded-full border border-slate-100"></div><div className="absolute -right-5 -top-1.5 w-3 h-3 bg-white rounded-full border border-slate-100"></div></div>
                             <div className="bg-slate-50/50 rounded-xl p-3 flex flex-col items-center gap-3">
@@ -1074,7 +1075,6 @@
                                                 const file = e.target.files[0];
                                                 if(file) { const base64 = await compressImage(file); setEditImage(base64); }
                                             }} className="hidden"/></label></div></div>
-                                        {/* [CR-IMPL] Pass extraSuggestions */}
                                         <div><label className="text-[10px] font-bold text-slate-400 uppercase">標籤</label><TagSelectInput allTags={allTags} selectedTags={editTags} onTagsChange={setEditTags} extraSuggestions={specificViewKeywords} /></div>
                                     </div>
                                 )}
@@ -1108,24 +1108,32 @@
                                     </div>
                                 </div>
                             )}
+                            {/* [CR-IMPL] Safe button layout */}
                             <div className="mt-4 shrink-0 flex flex-col gap-2">
                                 {isEditing ? (
                                     <div className="flex gap-2"><button onClick={()=>setIsEditing(false)} className="flex-1 py-3 bg-slate-100 text-slate-500 rounded-xl font-bold text-sm">取消</button><button onClick={handleSave} className="flex-1 py-3 bg-sky-500 text-white rounded-xl font-bold text-sm shadow-lg shadow-sky-100">儲存變更</button></div>
                                 ) : (
                                     <>
                                         {!ticket.isDeleted && <button onClick={() => { if(ticket.completed || window.confirm("確定核銷？")) { onToggleComplete(ticket); onClose(); } }} className="w-full py-4 text-base font-black rounded-2xl shadow-xl flex items-center justify-center gap-2 text-white bg-emerald-500 hover:bg-emerald-600 transition-all active:scale-95">{ticket.completed ? <><RotateCcw size={20}/> 標記未用</> : <><CheckCircle2 size={20}/> 立即核銷</>}</button>}
+                                        
                                         <div className="flex gap-2 h-11">
-                                            {ticket.isDeleted ? <button onClick={() => { onRestore(ticket); onClose(); }} className="flex-1 bg-emerald-50 text-emerald-600 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5"><RefreshCcw size={14}/> 還原</button> : <button onClick={() => setIsEditing(true)} className="flex-1 bg-slate-50 text-slate-500 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 border border-slate-100"><Pencil size={14}/> 編輯</button>}
-                                            <button onClick={() => { if(ticket.isDeleted ? confirm("永久刪除？") : true) { onDelete(ticket.id); onClose(); } }} className="flex-1 bg-red-50 text-red-500 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5"><Trash2 size={14}/> 刪除</button>
-                                            <button onClick={onClose} className="w-11 bg-slate-100 text-slate-500 rounded-xl flex items-center justify-center"><X size={18}/></button>
+                                            {ticket.isDeleted ? (
+                                                <button onClick={() => { onRestore(ticket); onClose(); }} className="flex-1 bg-emerald-50 text-emerald-600 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5"><RefreshCcw size={14}/> 還原</button> 
+                                            ) : (
+                                                <>
+                                                    <button onClick={() => setIsEditing(true)} className="flex-1 bg-slate-50 text-slate-500 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 border border-slate-100"><Pencil size={14}/> 編輯</button>
+                                                    <button onClick={() => { if(ticket.isDeleted ? confirm("永久刪除？") : true) { onDelete(ticket.id); onClose(); } }} className="w-16 bg-red-50 text-red-500 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 border border-red-100"><Trash2 size={16}/></button>
+                                                </>
+                                            )}
                                         </div>
+                                        {/* Big Close Button */}
+                                        <button onClick={onClose} className="w-full h-12 bg-slate-100 text-slate-500 font-bold rounded-xl flex items-center justify-center text-sm hover:bg-slate-200 transition-colors">關閉視窗</button>
                                     </>
                                 )}
                             </div>
                         </div>
                     </div>
                 </div>
-                {/* [CR-IMPL] Improved Close Button Style */}
                 {showFullScreen && ticket.image && (
                     <div className="fixed inset-0 z-[60] bg-black flex items-center justify-center p-2 fullscreen-overlay" onClick={() => setShowFullScreen(false)}>
                         <img src={ticket.image} className="max-w-full max-h-full object-contain" />
@@ -1187,7 +1195,6 @@
                             <div className="space-y-3">
                                 <div className="flex items-center gap-3"><div className="w-20 h-20 bg-slate-50 border border-dashed border-slate-300 rounded-2xl flex items-center justify-center relative overflow-hidden">{images.length > 0 ? <img src={images[0]} className="w-full h-full object-cover"/> : <ImageIcon className="text-slate-300"/>}<input type="file" className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" onChange={handleImageUpload}/></div><div className="flex-1 text-xs font-bold text-slate-400">上傳票券照片 (選填)</div></div>
                                 <input className="w-full p-3.5 bg-slate-50 rounded-xl outline-none font-bold" placeholder="票券名稱 (必填)" value={manualData.name} onChange={e=>setManualData({...manualData, name: e.target.value})}/>
-                                {/* [CR-IMPL] Pass extraSuggestions to AddTicketModal's TagInput */}
                                 <TagSelectInput allTags={allTags} selectedTags={manualTags} onTagsChange={setManualTags} extraSuggestions={specificViewKeywords} />
                                 <input className="w-full p-3.5 bg-slate-50 rounded-xl outline-none font-mono text-sm" placeholder="序號/代碼" value={manualData.serial} onChange={e=>setManualData({...manualData, serial: e.target.value})}/>
                                 <input type="date" className="w-full p-3.5 bg-slate-50 rounded-xl outline-none" value={manualData.expiry} onChange={e=>setManualData({...manualData, expiry: e.target.value})}/>
@@ -1258,7 +1265,7 @@
 
             const [settings, setSettings] = useState({ 
                 tgToken: '', tgChatId: '', notifyDays: 7, appTitle: '我的票夾',
-                specificViewKeywords: ['MOMO', '85度C'], // [CR-IMPL] 修正預設值
+                specificViewKeywords: ['MOMO', '85度C'], 
                 bgConfigMap: {}, 
                 viewConfigs: {
                     active: { ...defaultViewConfig },
@@ -1298,7 +1305,7 @@
                             const mergedSettings = {
                                 ...settings, ...dbSettings,
                                 bgConfigMap: dbSettings.bgConfigMap || {}, 
-                                specificViewKeywords: dbSettings.specificViewKeywords || ['MOMO', '85度C'], // [CR-IMPL] 載入舊資料時若無欄位則補上預設
+                                specificViewKeywords: dbSettings.specificViewKeywords || ['MOMO', '85度C'], 
                                 viewConfigs: {
                                     active: migrateConfig(dbSettings.viewConfigs?.active),
                                     completed: migrateConfig(dbSettings.viewConfigs?.completed),
@@ -1419,7 +1426,6 @@
                 alert(`匯入成功！共 ${importedTasks.length} 筆票券。`);
             };
 
-            // [CR-IMPL] 實作二次確認重置邏輯
             const handleFullReset = async () => {
                 if (window.confirm("⚠️ 注意：這將刪除所有票券、設定與背景紀錄，且無法復原。確定要徹底重設嗎？")) {
                     if (window.confirm("🔴 再次確認：刪除後資料將無法找回。真的要執行嗎？")) {
@@ -1496,6 +1502,5 @@
     </script>
 </body>
 </html>
-
 
 
