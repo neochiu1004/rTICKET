@@ -107,7 +107,7 @@
             CheckCircle2, ListTodo, Clock, StickyNote, Save, X, ScanBarcode,
             Pencil, ClipboardPaste, ArrowRightLeft, Copy, CheckSquare, Trash,
             RefreshCcw, Search, FolderPlus, AlertCircle, MoreVertical, Copy as CopyIcon, Link as LinkIcon,
-            Image as ImageIcon, Upload, Clipboard, ClipboardList, AlertTriangle, Download, FileJson, Database, FolderInput,
+            ImageIcon, Upload, Clipboard, ClipboardList, AlertTriangle, Download, FileJson, Database, FolderInput,
             LayoutDashboard, Moon, Sun, ChevronUp, ChevronDown, Filter, AlertOctagon, CheckSquareIcon,
             Bell, BellRing, Send, UserCheck, CloudCog, Maximize2, Wand2, WifiOff, FileUp, Replace, FilePlus2, RefreshCw,
             ImagePlus, Heart, HeartHandshake, Eye, EyeOff, Globe, BookOpen, Star, History, MousePointerClick, Layers,
@@ -380,7 +380,6 @@
         };
 
         const SettingsModal = ({ isOpen, onClose, settings, bgHistory, onSave, onRemoveHistory, onAddToHistory }) => {
-            // [CR-IMPL] Rules of Hooks: All hooks must be declared at the top level
             const [localSettings, setLocalSettings] = useState(settings ? JSON.parse(JSON.stringify(settings)) : {});
             const [currentTab, setCurrentTab] = useState('active');
             const [testStatus, setTestStatus] = useState(null);
@@ -388,7 +387,6 @@
             const headerFileInputRef = useRef(null);
             const galleryInputRef = useRef(null);
 
-            // [CR-IMPL] Behavioral Fix: Return null AFTER hooks have been declared to avoid crash
             if(!isOpen) return null;
 
             const currentViewConfig = localSettings.viewConfigs?.[currentTab] || { ...defaultViewConfig };
@@ -1091,8 +1089,14 @@
                                     )}
                                     <div className="flex-1 min-h-0">
                                         {viewMode === 'image' ? (
-                                            <div className="h-full flex flex-col items-center gap-3">
-                                                <div className="relative group w-full flex-1 min-h-0 flex items-center justify-center cursor-zoom-in" onClick={() => setShowFullScreen(true)}><img src={ticket.image} className="max-h-full w-auto rounded-xl shadow-md border border-slate-100" /></div>
+                                            <div className="h-full flex flex-col items-center gap-3 relative group">
+                                                {/* [CR-UI] 原圖模式新增頂部導覽按鈕 */}
+                                                <button onClick={onClose} className="absolute top-2 right-2 z-10 w-8 h-8 bg-black/50 backdrop-blur-md text-white rounded-full flex items-center justify-center shadow-lg transition-transform active:scale-90">
+                                                    <X size={18}/>
+                                                </button>
+                                                <div className="relative w-full flex-1 min-h-0 flex items-center justify-center cursor-zoom-in" onClick={() => setShowFullScreen(true)}>
+                                                    <img src={ticket.image} className="max-h-full w-auto rounded-xl shadow-md border border-slate-100" />
+                                                </div>
                                                 {ticket.serial && (<div className="w-full space-y-2 shrink-0"><div className="bg-white p-2 rounded-xl border border-slate-100"><BarcodeCanvas text={ticket.serial} /></div><div className="flex justify-center p-2 bg-white rounded-xl border border-slate-100 shrink-0"><QRCodeCanvas text={ticket.serial} size={100} /></div></div>)}
                                             </div>
                                         ) : isMomoMode ? (
@@ -1194,7 +1198,11 @@
                                 <input className="w-full p-3.5 bg-slate-50 rounded-xl outline-none font-bold" placeholder="票券名稱 (必填)" value={manualData.name} onChange={e=>setManualData({...manualData, name: e.target.value})}/>
                                 <TagSelectInput allTags={allTags} selectedTags={manualTags} onTagsChange={setManualTags} extraSuggestions={specificViewKeywords} />
                                 <input className="w-full p-3.5 bg-slate-50 rounded-xl outline-none font-mono text-sm" placeholder="序號/代碼" value={manualData.serial} onChange={e=>setManualData({...manualData, serial: e.target.value})}/>
-                                <input type="date" className="w-full p-3.5 bg-slate-50 rounded-xl outline-none" value={manualData.expiry} onChange={e=>setManualData({...manualData, expiry: e.target.value})}/>
+                                {/* [CR-UI] 手動輸入優化：新增標籤與樣式統一 */}
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">兌換期限</label>
+                                    <input type="date" className="w-full p-3.5 bg-slate-50 rounded-xl outline-none text-sm font-bold text-slate-600" value={manualData.expiry} onChange={e=>setManualData({...manualData, expiry: e.target.value})}/>
+                                </div>
                                 <button onClick={handleManualSubmit} className="w-full bg-sky-500 text-white py-3.5 rounded-2xl font-bold shadow-lg">確認新增</button>
                             </div>
                         )}
@@ -1275,6 +1283,13 @@
             const [showTagManager, setShowTagManager] = useState(false);
             const [isDataLoaded, setIsDataLoaded] = useState(false);
 
+            // [CR-FUNC] 定義全域遷移邏輯以供初始化與匯入使用
+            const migrateConfig = (config) => ({
+                ...defaultViewConfig, ...config,
+                bgSize: typeof config?.bgSize === 'number' ? config.bgSize : 100,
+                bgPosY: typeof config?.bgPosY === 'number' ? config.bgPosY : 50
+            });
+
             useEffect(() => {
                 const initData = async () => {
                     try {
@@ -1294,11 +1309,6 @@
 
                         if (dbTasks) setTasks(dbTasks);
                         if (dbSettings) {
-                            const migrateConfig = (config) => ({
-                                ...defaultViewConfig, ...config,
-                                bgSize: typeof config?.bgSize === 'number' ? config.bgSize : 100,
-                                bgPosY: typeof config?.bgPosY === 'number' ? config.bgPosY : 50
-                            });
                             const mergedSettings = {
                                 ...settings, ...dbSettings,
                                 bgConfigMap: dbSettings.bgConfigMap || {}, 
@@ -1416,7 +1426,21 @@
             const executeImport = (mode, restoreSettings) => {
                 if (!importPendingData) return;
                 const importedTasks = Array.isArray(importPendingData) ? importPendingData : (importPendingData.tasks || []);
-                if (restoreSettings && importPendingData.settings) setSettings(prev => ({...prev, ...importPendingData.settings}));
+                
+                // [CR-FUNC] 匯入資料保護：確保設定物件結構完整，防止白屏
+                if (restoreSettings && importPendingData.settings) {
+                    const impSet = importPendingData.settings;
+                    setSettings(prev => ({
+                        ...prev, ...impSet,
+                        specificViewKeywords: impSet.specificViewKeywords || ['MOMO', '85度C'],
+                        viewConfigs: {
+                            active: migrateConfig(impSet.viewConfigs?.active),
+                            completed: migrateConfig(impSet.viewConfigs?.completed),
+                            deleted: migrateConfig(impSet.viewConfigs?.deleted),
+                        }
+                    }));
+                }
+                
                 if (mode === 'append') setTasks(prev => [...prev, ...importedTasks]);
                 else setTasks(importedTasks);
                 setImportPendingData(null);
