@@ -1185,7 +1185,7 @@
                                             ) : (
                                                 <>
                                                     <button onClick={() => setIsEditing(true)} className="flex-1 bg-slate-50 text-slate-500 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 border border-slate-100"><Pencil size={14}/> 編輯</button>
-                                                    <button onClick={() => { if(ticket.isDeleted ? confirm("永久刪除？") : true) { onDelete(ticket.id); onClose(); } }} className="w-16 bg-red-50 text-red-500 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 border border-red-100"><Trash2 size={16}/></button>
+                                                    <button onClick={() => { if(ticket.isDeleted ? confirm("永久刪除？") : true) { onDelete(ticket.id, true); onClose(); } }} className="w-16 bg-red-50 text-red-500 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 border border-red-100"><Trash2 size={16}/></button>
                                                 </>
                                             )}
                                         </div>
@@ -1461,7 +1461,14 @@
                    sendTelegramMessage(settings.tgToken, settings.tgChatId, msg).catch(e => console.error(e));
                 }
             };
-            const handleDelete = (id) => {
+            const handleDelete = (id, forceNotify = false) => {
+                if (forceNotify && settings.tgToken && settings.tgChatId) {
+                    const target = tasks.find(t => t.id === id);
+                    if (target) {
+                        const msg = `🗑️ *[已刪除 (視同核銷)]* ${target.productName}\n⏰ 時間: ${formatDateTime(Date.now())}`;
+                        sendTelegramMessage(settings.tgToken, settings.tgChatId, msg).catch(e => console.error(e));
+                    }
+                }
                 if(view === 'deleted') { if(confirm("確定永久刪除？")) setTasks(prev => prev.filter(t => t.id !== id)); }
                 else setTasks(prev => prev.map(t => id === t.id ? { ...t, isDeleted: true } : t));
             };
