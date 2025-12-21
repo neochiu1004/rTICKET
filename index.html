@@ -1177,19 +1177,33 @@
                                     <div className="flex gap-2"><button onClick={()=>setIsEditing(false)} className="flex-1 py-3 bg-slate-100 text-slate-500 rounded-xl font-bold text-sm">取消</button><button onClick={handleSave} className="flex-1 py-3 bg-sky-500 text-white rounded-xl font-bold text-sm shadow-lg shadow-sky-100">儲存變更</button></div>
                                 ) : (
                                     <>
-                                        {!ticket.isDeleted && <button onClick={() => { if(ticket.completed || window.confirm("確定核銷？")) { onToggleComplete(ticket); onClose(); } }} className="w-full py-4 text-base font-black rounded-2xl shadow-xl flex items-center justify-center gap-2 text-white bg-emerald-500 hover:bg-emerald-600 transition-all active:scale-95">{ticket.completed ? <><RotateCcw size={20}/> 標記未用</> : <><CheckCircle2 size={20}/> 立即核銷</>}</button>}
+                                        {/* [CR-003] 第一列並排按鈕：刪除(紅) & 核銷(綠) */}
+                                        <div className="flex gap-2 mb-1">
+                                            <button 
+                                                onClick={() => { if(window.confirm("確定刪除此票券並視同核銷通知嗎？")) { onDelete(ticket.id, true); onClose(); } }} 
+                                                className="flex-1 py-4 text-sm font-black rounded-2xl shadow-xl flex items-center justify-center gap-2 text-white bg-red-500 hover:bg-red-600 transition-all active:scale-95"
+                                            >
+                                                <Trash2 size={18}/> 刪除
+                                            </button>
+                                            
+                                            {!ticket.isDeleted && (
+                                                <button 
+                                                    onClick={() => { if(ticket.completed || window.confirm("確定核銷？")) { onToggleComplete(ticket); onClose(); } }} 
+                                                    className="flex-[2] py-4 text-sm font-black rounded-2xl shadow-xl flex items-center justify-center gap-2 text-white bg-emerald-500 hover:bg-emerald-600 transition-all active:scale-95"
+                                                >
+                                                    {ticket.completed ? <><RotateCcw size={18}/> 標記未用</> : <><CheckCircle2 size={18}/> 立即核銷</>}
+                                                </button>
+                                            )}
+                                        </div>
                                         
                                         <div className="flex gap-2 h-11">
                                             {ticket.isDeleted ? (
                                                 <button onClick={() => { onRestore(ticket); onClose(); }} className="flex-1 bg-emerald-50 text-emerald-600 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5"><RefreshCcw size={14}/> 還原</button> 
                                             ) : (
-                                                <>
-                                                    <button onClick={() => setIsEditing(true)} className="flex-1 bg-slate-50 text-slate-500 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 border border-slate-100"><Pencil size={14}/> 編輯</button>
-                                                    <button onClick={() => { if(ticket.isDeleted ? confirm("永久刪除？") : true) { onDelete(ticket.id, true); onClose(); } }} className="w-16 bg-red-50 text-red-500 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 border border-red-100"><Trash2 size={16}/></button>
-                                                </>
+                                                <button onClick={() => setIsEditing(true)} className="flex-1 bg-slate-50 text-slate-500 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 border border-slate-100"><Pencil size={14}/> 編輯</button>
                                             )}
+                                            <button onClick={onClose} className="flex-1 bg-slate-100 text-slate-500 font-bold rounded-xl flex items-center justify-center text-xs hover:bg-slate-200 transition-colors">關閉</button>
                                         </div>
-                                        <button onClick={onClose} className="w-full h-12 bg-slate-100 text-slate-500 font-bold rounded-xl flex items-center justify-center text-sm hover:bg-slate-200 transition-colors">關閉視窗</button>
                                     </>
                                 )}
                             </div>
@@ -1457,7 +1471,8 @@
                 const completedAt = newStatus ? Date.now() : null; 
                 setTasks(prev => prev.map(t => t.id === ticket.id ? { ...t, completed: newStatus, completedAt: completedAt } : t));
                 if (newStatus && settings.tgToken && settings.tgChatId) {
-                   const msg = `✅ *[已核銷]* ${ticket.productName}\n⏰ 時間: ${formatDateTime(completedAt)}`;
+                   // [CR-003] 通知加入序號
+                   const msg = `✅ *[已核銷]* ${ticket.productName}\n🔢 序號: ${ticket.serial || '無'}\n⏰ 時間: ${formatDateTime(completedAt)}`;
                    sendTelegramMessage(settings.tgToken, settings.tgChatId, msg).catch(e => console.error(e));
                 }
             };
@@ -1465,7 +1480,8 @@
                 if (forceNotify && settings.tgToken && settings.tgChatId) {
                     const target = tasks.find(t => t.id === id);
                     if (target) {
-                        const msg = `🗑️ *[已刪除 (視同核銷)]* ${target.productName}\n⏰ 時間: ${formatDateTime(Date.now())}`;
+                        // [CR-003] 通知加入序號
+                        const msg = `🗑️ *[已刪除 (視同核銷)]* ${target.productName}\n🔢 序號: ${target.serial || '無'}\n⏰ 時間: ${formatDateTime(Date.now())}`;
                         sendTelegramMessage(settings.tgToken, settings.tgChatId, msg).catch(e => console.error(e));
                     }
                 }
