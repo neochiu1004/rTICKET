@@ -371,7 +371,7 @@
             backgroundImage: '', 
             headerBackgroundImage: '', 
             cardOpacity: 0.95, 
-            bgOpacity: 1, // [CR-IMPL] 新增背景透明度預設值
+            bgOpacity: 1, 
             bgPosY: 50, 
             bgSize: 100,
             cardBgColor: '#ffffff',
@@ -612,7 +612,7 @@
                                                         backgroundSize: `${currentViewConfig.bgSize || 100}% auto`,
                                                         backgroundPosition: `center ${currentViewConfig.bgPosY || 50}%`,
                                                         backgroundRepeat: 'no-repeat',
-                                                        opacity: currentViewConfig.bgOpacity || 1 // [CR-IMPL] 預覽區也支援透明度
+                                                        opacity: currentViewConfig.bgOpacity || 1
                                                     }}
                                                 />
                                                 <div className="absolute top-1 right-1 bg-black/40 backdrop-blur-sm text-white text-[9px] px-1.5 py-0.5 rounded-lg font-bold flex items-center gap-1 shadow-sm">
@@ -655,7 +655,6 @@
                                             </div>
                                         </div>
 
-                                        {/* [CR-IMPL] 新增背景透明度控制項 */}
                                         <div>
                                             <div className="flex justify-between items-center mb-2">
                                                 <label className="text-xs font-bold text-slate-500 flex items-center gap-1"><Droplets size={12}/> 背景透明度</label>
@@ -1098,13 +1097,6 @@
                 setIsEditing(false);
             };
 
-            const handleImageChange = async (e) => {
-                const file = e.target.files[0];
-                if(file) {
-                    try { const base64 = await compressImage(file); setEditImage(base64); } catch(err) { alert("處理圖片時發生錯誤：" + err.message); }
-                }
-            };
-
             const hasImage = !!ticket.image;
             const isMomoMode = viewMode === 'momo';
 
@@ -1149,16 +1141,33 @@
                                             </div>
                                         </div>
                                     )}
-                                    <div className="flex-1 min-h-0">
+                                    <div className="flex-1 min-h-0 relative">
                                         {viewMode === 'image' ? (
-                                            <div className="h-full flex flex-col items-center gap-3 relative group">
+                                            <div className="h-full flex flex-col items-center gap-3 group relative">
                                                 <button onClick={onClose} className="absolute top-2 right-2 z-10 w-8 h-8 bg-black/50 backdrop-blur-md text-white rounded-full flex items-center justify-center shadow-lg transition-transform active:scale-90">
                                                     <X size={18}/>
                                                 </button>
                                                 <div className="relative w-full flex-1 min-h-0 flex items-center justify-center cursor-zoom-in" onClick={() => setShowFullScreen(true)}>
                                                     <img src={ticket.image} className="max-h-full w-auto rounded-xl shadow-md border border-slate-100" />
                                                 </div>
-                                                {ticket.serial && (<div className="w-full space-y-2 shrink-0"><div className="bg-white p-2 rounded-xl border border-slate-100"><BarcodeCanvas text={ticket.serial} /></div><div className="flex justify-center p-2 bg-white rounded-xl border border-slate-100 shrink-0"><QRCodeCanvas text={ticket.serial} size={100} /></div></div>)}
+                                                {/* [CR-002] 原圖模式快捷按鈕欄 */}
+                                                {!ticket.isDeleted && (
+                                                    <div className="absolute bottom-4 left-0 right-0 px-6 flex gap-2 animate-slide-up">
+                                                        <button 
+                                                            onClick={(e) => { e.stopPropagation(); if(window.confirm("確定刪除此票券？")) { onDelete(ticket.id, true); onClose(); } }} 
+                                                            className="flex-1 py-3 bg-red-500/90 backdrop-blur-md text-white rounded-xl text-xs font-black shadow-lg flex items-center justify-center gap-1.5"
+                                                        >
+                                                            <Trash size={14}/> 刪除
+                                                        </button>
+                                                        <button 
+                                                            onClick={(e) => { e.stopPropagation(); if(window.confirm("確定核銷？")) { onToggleComplete(ticket); onClose(); } }} 
+                                                            className="flex-[2] py-3 bg-emerald-500/90 backdrop-blur-md text-white rounded-xl text-xs font-black shadow-lg flex items-center justify-center gap-1.5"
+                                                        >
+                                                            <CheckCircle2 size={14}/> {ticket.completed ? '恢復未用' : '快速核銷'}
+                                                        </button>
+                                                    </div>
+                                                )}
+                                                {ticket.serial && (<div className="w-full space-y-2 shrink-0 pb-12"><div className="bg-white p-2 rounded-xl border border-slate-100"><BarcodeCanvas text={ticket.serial} /></div><div className="flex justify-center p-2 bg-white rounded-xl border border-slate-100 shrink-0"><QRCodeCanvas text={ticket.serial} size={100} /></div></div>)}
                                             </div>
                                         ) : isMomoMode ? (
                                             <div className="h-full py-1"><MomoTemplate ticket={ticket} /></div>
@@ -1177,7 +1186,6 @@
                                     <div className="flex gap-2"><button onClick={()=>setIsEditing(false)} className="flex-1 py-3 bg-slate-100 text-slate-500 rounded-xl font-bold text-sm">取消</button><button onClick={handleSave} className="flex-1 py-3 bg-sky-500 text-white rounded-xl font-bold text-sm shadow-lg shadow-sky-100">儲存變更</button></div>
                                 ) : (
                                     <>
-                                        {/* [CR-003] 第一列並排按鈕：刪除(紅) & 核銷(綠) */}
                                         <div className="flex gap-2 mb-1">
                                             <button 
                                                 onClick={() => { if(window.confirm("確定刪除此票券並視同核銷通知嗎？")) { onDelete(ticket.id, true); onClose(); } }} 
@@ -1361,7 +1369,7 @@
                 ...defaultViewConfig, ...config,
                 bgSize: typeof config?.bgSize === 'number' ? config.bgSize : 100,
                 bgPosY: typeof config?.bgPosY === 'number' ? config.bgPosY : 50,
-                bgOpacity: typeof config?.bgOpacity === 'number' ? config.bgOpacity : 1 // [CR-IMPL] 新增欄位遷移
+                bgOpacity: typeof config?.bgOpacity === 'number' ? config.bgOpacity : 1 
             });
 
             useEffect(() => {
@@ -1453,12 +1461,25 @@
                     const isDupA = duplicateSerials.has(a.serial) && !a.completed && !a.isDeleted;
                     const isDupB = duplicateSerials.has(b.serial) && !b.completed && !b.isDeleted;
                     if (isDupA !== isDupB) return isDupA ? -1 : 1;
+
+                    // [CR-003] 排序邏輯調整：已用區與回收區預設依進入該區的時間排序
+                    if (sortType === 'newest') {
+                        if (view === 'completed') return (b.completedAt || 0) - (a.completedAt || 0);
+                        if (view === 'deleted') return (b.deletedAt || 0) - (a.deletedAt || 0);
+                        return b.createdAt - a.createdAt;
+                    }
+                    if (sortType === 'oldest') {
+                        if (view === 'completed') return (a.completedAt || 0) - (b.completedAt || 0);
+                        if (view === 'deleted') return (a.deletedAt || 0) - (b.deletedAt || 0);
+                        return a.createdAt - b.createdAt;
+                    }
+
                     if (sortType === 'expiring') {
                         const dateA = a.expiry ? new Date(a.expiry.replace(/\//g, '-')) : new Date(9999, 11, 31);
                         const dateB = b.expiry ? new Date(b.expiry.replace(/\//g, '-')) : new Date(9999, 11, 31);
                         return dateA - dateB;
-                    } else if (sortType === 'newest') return b.createdAt - a.createdAt;
-                    else return a.createdAt - b.createdAt;
+                    } 
+                    return 0;
                 });
                 return result;
             }, [tasks, view, activeTag, searchQuery, sortType, duplicateSerials, settings.notifyDays]);
@@ -1471,24 +1492,29 @@
                 const completedAt = newStatus ? Date.now() : null; 
                 setTasks(prev => prev.map(t => t.id === ticket.id ? { ...t, completed: newStatus, completedAt: completedAt } : t));
                 if (newStatus && settings.tgToken && settings.tgChatId) {
-                   // [CR-003] 通知加入序號
                    const msg = `✅ *[已核銷]* ${ticket.productName}\n🔢 序號: ${ticket.serial || '無'}\n⏰ 時間: ${formatDateTime(completedAt)}`;
                    sendTelegramMessage(settings.tgToken, settings.tgChatId, msg).catch(e => console.error(e));
                 }
             };
+
             const handleDelete = (id, forceNotify = false) => {
+                const now = Date.now();
                 if (forceNotify && settings.tgToken && settings.tgChatId) {
                     const target = tasks.find(t => t.id === id);
                     if (target) {
-                        // [CR-003] 通知加入序號
-                        const msg = `🗑️ *[已刪除 (視同核銷)]* ${target.productName}\n🔢 序號: ${target.serial || '無'}\n⏰ 時間: ${formatDateTime(Date.now())}`;
+                        // [CR-001] 刪除通知包含方案與序號資訊
+                        const msg = `🗑️ *[已刪除 (視同核銷)]*\n方案: ${target.productName}\n序號: \`${target.serial || '無'}\`\n時間: ${formatDateTime(now)}`;
                         sendTelegramMessage(settings.tgToken, settings.tgChatId, msg).catch(e => console.error(e));
                     }
                 }
                 if(view === 'deleted') { if(confirm("確定永久刪除？")) setTasks(prev => prev.filter(t => t.id !== id)); }
-                else setTasks(prev => prev.map(t => id === t.id ? { ...t, isDeleted: true } : t));
+                else {
+                    // [CR-003] 標記刪除並存入 deletedAt
+                    setTasks(prev => prev.map(t => id === t.id ? { ...t, isDeleted: true, deletedAt: now } : t));
+                }
             };
-            const handleRestore = (ticket) => setTasks(prev => prev.map(t => t.id === ticket.id ? { ...t, isDeleted: false } : t));
+
+            const handleRestore = (ticket) => setTasks(prev => prev.map(t => t.id === ticket.id ? { ...t, isDeleted: false, deletedAt: null } : t));
             const handleDeleteTag = (tag) => setTasks(prev => prev.map(t => ({ ...t, tags: (t.tags||[]).filter(tt => tt !== tag) })));
             
             const handleBackup = () => {
@@ -1570,7 +1596,6 @@
 
             return (
                 <>
-                    {/* [CR-IMPL] 背景圖層應用透明度樣式：opacity: currentConfig.bgOpacity */}
                     {currentConfig.backgroundImage && <div className="fixed inset-0 z-0 mx-auto max-w-md transition-all duration-500" style={{ top: '150px', backgroundImage: `url(${currentConfig.backgroundImage})`, backgroundSize: `${currentConfig.bgSize || 100}% auto`, backgroundPosition: `center ${currentConfig.bgPosY || 50}%`, backgroundRepeat: 'no-repeat', opacity: currentConfig.bgOpacity || 1 }} />}
                     
                     <div className="max-w-md mx-auto min-h-screen relative shadow-2xl sm:border-x border-slate-200 transition-all duration-500 z-10" style={{ backgroundColor: currentConfig.backgroundImage ? 'transparent' : '#f8fafc' }}>
@@ -1584,7 +1609,7 @@
                         
                         {isSelectionMode ? (
                             <div className="fixed bottom-10 left-1/2 -translate-x-1/2 flex gap-3 z-40 animate-slide-up">
-                                {selectedIds.size > 0 && <><button onClick={() => setShowBatchModal(true)} className="bg-sky-500 hover:bg-sky-600 text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-sky-200 flex items-center gap-2"><Tag size={18}/> 批量標籤</button><button onClick={() => { if(confirm(`確定刪除 ${selectedIds.size} 項目？`)) { if(view === 'deleted') setTasks(prev => prev.filter(t => !selectedIds.has(t.id))); else setTasks(prev => prev.map(t => selectedIds.has(t.id) ? { ...t, isDeleted: true } : t)); setSelectedIds(new Set()); setIsSelectionMode(false); } }} className="bg-white text-red-500 border border-red-100 px-4 py-3 rounded-2xl font-bold shadow-lg flex items-center gap-2 hover:bg-red-50"><Trash2 size={18}/></button></>}
+                                {selectedIds.size > 0 && <><button onClick={() => setShowBatchModal(true)} className="bg-sky-500 hover:bg-sky-600 text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-sky-200 flex items-center gap-2"><Tag size={18}/> 批量標籤</button><button onClick={() => { if(confirm(`確定刪除 ${selectedIds.size} 項目？`)) { if(view === 'deleted') setTasks(prev => prev.filter(t => !selectedIds.has(t.id))); else { const now = Date.now(); setTasks(prev => prev.map(t => selectedIds.has(t.id) ? { ...t, isDeleted: true, deletedAt: now } : t)); } setSelectedIds(new Set()); setIsSelectionMode(false); } }} className="bg-white text-red-500 border border-red-100 px-4 py-3 rounded-2xl font-bold shadow-lg flex items-center gap-2 hover:bg-red-50"><Trash2 size={18}/></button></>}
                                 <button onClick={() => {setIsSelectionMode(false); setSelectedIds(new Set());}} className="bg-slate-800 text-white px-4 py-3 rounded-2xl font-bold shadow-lg">取消</button>
                             </div>
                         ) : <button onClick={() => setShowAddModal(true)} className="fixed bottom-10 right-5 w-16 h-16 bg-sky-500 text-white rounded-[24px] shadow-2xl flex items-center justify-center text-3xl active:scale-90 transition-transform z-40"><Plus size={32}/></button>}
