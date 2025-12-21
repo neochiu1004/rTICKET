@@ -1141,7 +1141,7 @@
                                             </div>
                                         </div>
                                     )}
-                                    <div className="flex-1 min-h-0 relative">
+                                    <div className="flex-1 min-h-0 relative overflow-hidden">
                                         {viewMode === 'image' ? (
                                             <div className="h-full flex flex-col items-center gap-3 group relative">
                                                 <button onClick={onClose} className="absolute top-2 right-2 z-10 w-8 h-8 bg-black/50 backdrop-blur-md text-white rounded-full flex items-center justify-center shadow-lg transition-transform active:scale-90">
@@ -1149,25 +1149,25 @@
                                                 </button>
                                                 <div className="relative w-full flex-1 min-h-0 flex items-center justify-center cursor-zoom-in" onClick={() => setShowFullScreen(true)}>
                                                     <img src={ticket.image} className="max-h-full w-auto rounded-xl shadow-md border border-slate-100" />
+                                                    {/* [CR-002] 原圖模式快捷核銷與刪除按鈕 */}
+                                                    {!ticket.isDeleted && (
+                                                        <div className="absolute bottom-6 left-0 right-0 px-6 flex gap-2 z-[40] animate-slide-up">
+                                                            <button 
+                                                                onClick={(e) => { e.stopPropagation(); if(window.confirm("確定刪除此票券？")) { onDelete(ticket.id, true); onClose(); } }} 
+                                                                className="flex-1 py-3.5 bg-red-500/95 backdrop-blur-md text-white rounded-2xl text-[13px] font-black shadow-2xl flex items-center justify-center gap-2 border border-white/20 active:scale-95 transition-all"
+                                                            >
+                                                                <Trash2 size={16}/> 刪除
+                                                            </button>
+                                                            <button 
+                                                                onClick={(e) => { e.stopPropagation(); if(window.confirm("確定核銷？")) { onToggleComplete(ticket); onClose(); } }} 
+                                                                className="flex-[2] py-3.5 bg-emerald-500/95 backdrop-blur-md text-white rounded-2xl text-[13px] font-black shadow-2xl flex items-center justify-center gap-2 border border-white/20 active:scale-95 transition-all"
+                                                            >
+                                                                {ticket.completed ? <><RotateCcw size={16}/> 恢復</> : <><CheckCircle2 size={16}/> 快速核銷</>}
+                                                            </button>
+                                                        </div>
+                                                    )}
                                                 </div>
-                                                {/* [CR-002] 原圖模式快捷按鈕欄 */}
-                                                {!ticket.isDeleted && (
-                                                    <div className="absolute bottom-4 left-0 right-0 px-6 flex gap-2 animate-slide-up">
-                                                        <button 
-                                                            onClick={(e) => { e.stopPropagation(); if(window.confirm("確定刪除此票券？")) { onDelete(ticket.id, true); onClose(); } }} 
-                                                            className="flex-1 py-3 bg-red-500/90 backdrop-blur-md text-white rounded-xl text-xs font-black shadow-lg flex items-center justify-center gap-1.5"
-                                                        >
-                                                            <Trash size={14}/> 刪除
-                                                        </button>
-                                                        <button 
-                                                            onClick={(e) => { e.stopPropagation(); if(window.confirm("確定核銷？")) { onToggleComplete(ticket); onClose(); } }} 
-                                                            className="flex-[2] py-3 bg-emerald-500/90 backdrop-blur-md text-white rounded-xl text-xs font-black shadow-lg flex items-center justify-center gap-1.5"
-                                                        >
-                                                            <CheckCircle2 size={14}/> {ticket.completed ? '恢復未用' : '快速核銷'}
-                                                        </button>
-                                                    </div>
-                                                )}
-                                                {ticket.serial && (<div className="w-full space-y-2 shrink-0 pb-12"><div className="bg-white p-2 rounded-xl border border-slate-100"><BarcodeCanvas text={ticket.serial} /></div><div className="flex justify-center p-2 bg-white rounded-xl border border-slate-100 shrink-0"><QRCodeCanvas text={ticket.serial} size={100} /></div></div>)}
+                                                {ticket.serial && (<div className="w-full space-y-2 shrink-0 pb-4"><div className="bg-white p-2 rounded-xl border border-slate-100"><BarcodeCanvas text={ticket.serial} /></div><div className="flex justify-center p-2 bg-white rounded-xl border border-slate-100 shrink-0"><QRCodeCanvas text={ticket.serial} size={100} /></div></div>)}
                                             </div>
                                         ) : isMomoMode ? (
                                             <div className="h-full py-1"><MomoTemplate ticket={ticket} /></div>
@@ -1462,7 +1462,7 @@
                     const isDupB = duplicateSerials.has(b.serial) && !b.completed && !b.isDeleted;
                     if (isDupA !== isDupB) return isDupA ? -1 : 1;
 
-                    // [CR-003] 排序邏輯調整：已用區與回收區預設依進入該區的時間排序
+                    // [CR-003] 已用與回收區預設依「進入該區域的時間」排序
                     if (sortType === 'newest') {
                         if (view === 'completed') return (b.completedAt || 0) - (a.completedAt || 0);
                         if (view === 'deleted') return (b.deletedAt || 0) - (a.deletedAt || 0);
@@ -1502,14 +1502,14 @@
                 if (forceNotify && settings.tgToken && settings.tgChatId) {
                     const target = tasks.find(t => t.id === id);
                     if (target) {
-                        // [CR-001] 刪除通知包含方案與序號資訊
+                        // [CR-001] 通知包含方案與序號
                         const msg = `🗑️ *[已刪除 (視同核銷)]*\n方案: ${target.productName}\n序號: \`${target.serial || '無'}\`\n時間: ${formatDateTime(now)}`;
                         sendTelegramMessage(settings.tgToken, settings.tgChatId, msg).catch(e => console.error(e));
                     }
                 }
                 if(view === 'deleted') { if(confirm("確定永久刪除？")) setTasks(prev => prev.filter(t => t.id !== id)); }
                 else {
-                    // [CR-003] 標記刪除並存入 deletedAt
+                    // [CR-003] 記錄刪除時間以便排序
                     setTasks(prev => prev.map(t => id === t.id ? { ...t, isDeleted: true, deletedAt: now } : t));
                 }
             };
