@@ -113,7 +113,7 @@
             ImagePlus, Heart, HeartHandshake, Eye, EyeOff, Globe, BookOpen, Star, History, MousePointerClick, Layers,
             CalendarX2, CopyPlus, Lightbulb, Loader2, QrCode, SlidersHorizontal, ArrowUpDown, Image, CheckCheck, SendHorizontal, XCircle, Droplets,
             MoveVertical, BoxSelect, Monitor, Palette, Rows, LayoutGrid, ChevronRight, ChevronDown as ChevronDownIcon,
-            PanelTop, PaintBucket, Maximize, Move, Eye as PreviewIcon, Info, MapPin, DatabaseBackup, ArchiveRestore, Eraser, Settings2, BookTemplate, FileImage
+            PanelTop, PaintBucket, Maximize, Move, Eye as PreviewIcon, Info, MapPin, DatabaseBackup, ArchiveRestore, Eraser, Settings2, BookTemplate
         } from 'lucide-react';
 
         // --- 1. Core Logic (Helpers & DB) ---
@@ -212,13 +212,14 @@
                         id: 'task_' + Date.now() + '_' + i + '_' + Math.random().toString(36).substr(2,5),
                         text: rawLine, originalRaw: rawLine,
                         isTicket: true, serial: serialStr, productName: finalName, expiry: dateStr,
-                        tags: [], images: [], image: '', originalImage: '', completed: false, isDeleted: false, createdAt: Date.now(), note: '',
+                        tags: [], images: [], image: '', completed: false, isDeleted: false, createdAt: Date.now(), note: '',
                     });
                 }
             }
             return results;
         };
 
+        // [CR-FUNC] 擴充壓縮函式，支援縮圖與原圖品質分離
         const compressImage = (fileOrUrl, quality = 0.8, maxWidth = 1200) => {
             return new Promise((resolve, reject) => {
                 const img = new window.Image();
@@ -237,6 +238,7 @@
                     let width = img.width; 
                     let height = img.height;
 
+                    // 縮放邏輯
                     if (width > maxWidth) {
                         height = Math.round((height * maxWidth) / width);
                         width = maxWidth;
@@ -396,6 +398,7 @@
 
         const SettingsModal = ({ isOpen, onClose, settings, bgHistory, onSave, onRemoveHistory, onAddToHistory }) => {
             const [localSettings, setLocalSettings] = useState(settings ? JSON.parse(JSON.stringify(settings)) : {});
+            const [currentTab, setCurrentTab] = useState('active');
             const [testStatus, setTestStatus] = useState(null);
             const [newKw, setNewKw] = useState('');
             const headerFileInputRef = useRef(null);
@@ -403,8 +406,6 @@
 
             if(!isOpen) return null;
 
-            // [CR-FUNC] 僅固定操作 'active' 設定，實現背景統一化
-            const currentTab = 'active';
             const currentViewConfig = localSettings.viewConfigs?.[currentTab] || { ...defaultViewConfig };
 
             const handleGlobalChange = (key, value) => {
@@ -535,8 +536,24 @@
                             </div>
                             
                             <div className="border-t border-slate-100 pt-4">
-                                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 block">外觀與背景設定 (全域生效)</label>
+                                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 block">外觀設定</label>
                                 
+                                <div className="flex bg-slate-100 p-1 rounded-xl mb-4">
+                                    {[
+                                        {id: 'active', label: '待使用', icon: ListTodo},
+                                        {id: 'completed', label: '已使用', icon: CheckCircle2},
+                                        {id: 'deleted', label: '回收桶', icon: Trash}
+                                    ].map(tab => (
+                                        <button 
+                                            key={tab.id}
+                                            onClick={() => setCurrentTab(tab.id)}
+                                            className={`flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition-all ${currentTab === tab.id ? 'bg-white shadow text-sky-600' : 'text-slate-400 hover:text-slate-600'}`}
+                                        >
+                                            <tab.icon size={12} /> {tab.label}
+                                        </button>
+                                    ))}
+                                </div>
+
                                 <div className="space-y-4 animate-fade-in">
                                     <div className="bg-slate-50 p-3 rounded-xl space-y-2">
                                         <div className="flex justify-between items-center">
@@ -601,6 +618,7 @@
                                         </div>
                                     </div>
                                     
+                                    {/* [CR-FUNC] 範本管理 UI */}
                                     <div className="border-t border-slate-100 pt-4">
                                         <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block flex items-center gap-1"><BookTemplate size={12}/> 已儲存範本</label>
                                         <div className="space-y-2 max-h-40 overflow-y-auto no-scrollbar">
@@ -612,10 +630,11 @@
                                                     </div>
                                                     <button onClick={() => handleGlobalChange('templates', localSettings.templates.filter(tt => tt.id !== t.id))} className="text-red-400 p-1 hover:bg-red-50 rounded-lg"><Trash2 size={14}/></button>
                                                 </div>
-                                            )) : <div className="text-center py-4 text-slate-300 text-[10px]">尚無範本。</div>}
+                                            )) : <div className="text-center py-4 text-slate-300 text-[10px]">尚無範本，可在編輯票券時儲存。</div>}
                                         </div>
                                     </div>
 
+                                    {/* (其餘背景設定邏輯保持不變) */}
                                     <div className="bg-slate-50 p-3 rounded-xl space-y-3">
                                         {currentViewConfig.backgroundImage && (
                                             <div className="w-32 aspect-[3/5] mx-auto bg-slate-200 rounded-xl border border-slate-300 relative overflow-hidden flex items-center justify-center shadow-inner">
@@ -1036,8 +1055,8 @@
                     <div className="flex-1 overflow-y-auto no-scrollbar">
                         <div className="p-3 space-y-3">
                             <div className="flex gap-3">
-                                {/* [CR-FUNC] 優先顯示 originalImage 作為核銷頁主圖 */}
-                                <div onClick={onImageClick} className="w-20 h-20 shrink-0 border border-slate-100 rounded-lg overflow-hidden bg-slate-50 flex items-center justify-center cursor-zoom-in">{(ticket.originalImage || ticket.image) ? <img src={ticket.originalImage || ticket.image} className="w-full h-full object-cover" /> : <ImageIcon className="text-slate-200" size={24} />}</div>
+                                {/* [CR-FUNC] 優先使用原圖集的第一張作為原圖顯示 */}
+                                <div onClick={onImageClick} className="w-20 h-20 shrink-0 border border-slate-100 rounded-lg overflow-hidden bg-slate-50 flex items-center justify-center cursor-zoom-in">{(ticket.images?.[0] || ticket.image) ? <img src={ticket.images?.[0] || ticket.image} className="w-full h-full object-cover" /> : <ImageIcon className="text-slate-200" size={24} />}</div>
                                 <div className="flex-1 min-w-0 flex flex-col justify-center"><h2 className="text-[15px] font-black text-slate-800 leading-tight line-clamp-2">{ticket.productName}</h2>
                                 </div>
                             </div>
@@ -1065,7 +1084,7 @@
             const [editExpiry, setEditExpiry] = useState(ticket.expiry);
             const [editTags, setEditTags] = useState(ticket.tags || []);
             const [editImage, setEditImage] = useState(ticket.image || '');
-            const [editOriginalImage, setEditOriginalImage] = useState(ticket.originalImage || '');
+            const [editOriginal, setEditOriginal] = useState(ticket.images?.[0] || '');
             
             useEffect(() => {
                 if (ticket) {
@@ -1073,7 +1092,7 @@
                     setEditExpiry(ticket.expiry);
                     setEditTags(ticket.tags || []);
                     setEditImage(ticket.image || '');
-                    setEditOriginalImage(ticket.originalImage || '');
+                    setEditOriginal(ticket.images?.[0] || '');
                 }
             }, [ticket]);
 
@@ -1083,13 +1102,14 @@
                 return keywords.some(kw => searchTarget.includes(kw.toUpperCase()));
             }, [ticket, specificViewKeywords]);
 
-            const [viewMode, setViewMode] = useState(isSpecificView ? 'momo' : ((ticket.originalImage || ticket.image) && !ticket.serial ? 'image' : 'standard'));
+            const [viewMode, setViewMode] = useState(isSpecificView ? 'momo' : ((ticket.images?.[0] || ticket.image) && !ticket.serial ? 'image' : 'standard'));
             const [showFullScreen, setShowFullScreen] = useState(false);
 
             const handleSave = () => {
                 onUpdate({
                     ...ticket, productName: editName, expiry: editExpiry.replace(/-/g, '/'),
-                    tags: editTags, image: editImage, originalImage: editOriginalImage
+                    tags: editTags, image: editImage,
+                    images: editOriginal ? [editOriginal, ...(ticket.images || []).filter(img => img !== editOriginal)] : ticket.images
                 });
                 setIsEditing(false);
             };
@@ -1101,14 +1121,13 @@
                         templateName,
                         productName: editName,
                         image: editImage,
-                        originalImage: editOriginalImage,
                         tags: editTags
                     });
-                    alert("已儲存為範本！");
+                    alert("已儲存為範本！可在新增或批量編輯時套用。");
                 }
             };
 
-            const hasImage = !!(ticket.originalImage || ticket.image);
+            const hasImage = !!(ticket.images?.[0] || ticket.image);
             const isMomoMode = viewMode === 'momo';
 
             return (
@@ -1124,34 +1143,18 @@
                                 )}
                                 {isEditing && (
                                     <div className="mt-2 text-left space-y-3 bg-slate-50 p-4 rounded-2xl">
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <div>
-                                                <label className="text-[10px] font-bold text-slate-400 uppercase">縮圖 (主畫面用)</label>
-                                                <div className="mt-1 flex flex-col gap-2">
-                                                    <div className="w-full aspect-square bg-white border border-dashed border-slate-300 rounded-lg flex items-center justify-center relative overflow-hidden">
-                                                        {editImage ? <img src={editImage} className="w-full h-full object-cover"/> : <ImageIcon size={20} className="text-slate-200"/>}
-                                                        <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={async e => {
-                                                            const file = e.target.files[0];
-                                                            if(file) { const base64 = await compressImage(file, 0.4, 400); setEditImage(base64); }
-                                                        }}/>
-                                                    </div>
-                                                    <span className="text-[9px] text-center text-slate-400">點擊上傳縮圖</span>
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <label className="text-[10px] font-bold text-slate-400 uppercase">原圖 (核銷用)</label>
-                                                <div className="mt-1 flex flex-col gap-2">
-                                                    <div className="w-full aspect-square bg-white border border-dashed border-slate-300 rounded-lg flex items-center justify-center relative overflow-hidden">
-                                                        {editOriginalImage ? <img src={editOriginalImage} className="w-full h-full object-cover"/> : <FileImage size={20} className="text-slate-200"/>}
-                                                        <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={async e => {
-                                                            const file = e.target.files[0];
-                                                            if(file) { const base64 = await compressImage(file, 0.9, 1600); setEditOriginalImage(base64); }
-                                                        }}/>
-                                                    </div>
-                                                    <span className="text-[9px] text-center text-slate-400">點擊上傳高品質圖</span>
-                                                </div>
-                                            </div>
-                                        </div>
+                                        <div><label className="text-[10px] font-bold text-slate-400 uppercase">封面 (點選上傳原圖並自動產生縮圖)</label><div className="flex items-center gap-3 mt-1">{editImage ? <img src={editImage} className="w-12 h-12 object-cover rounded-lg border border-slate-200"/> : <div className="w-12 h-12 bg-white border border-dashed border-slate-300 rounded-lg flex items-center justify-center"><ImageIcon size={16} className="text-slate-300"/></div>}<label className="px-3 py-1 bg-sky-100 text-sky-600 text-[10px] font-bold rounded-md cursor-pointer">更換圖片 <input type="file" accept="image/*" onChange={async e => {
+                                                const file = e.target.files[0];
+                                                if(file) { 
+                                                    // 同步產生縮圖與高品質原圖
+                                                    const [thumb, orig] = await Promise.all([
+                                                        compressImage(file, 0.4, 400),
+                                                        compressImage(file, 0.9, 1600)
+                                                    ]);
+                                                    setEditImage(thumb);
+                                                    setEditOriginal(orig);
+                                                }
+                                            }} className="hidden"/></label></div></div>
                                         <div>
                                             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">兌換期限</label>
                                             <input 
@@ -1183,7 +1186,7 @@
                                                     <X size={18}/>
                                                 </button>
                                                 <div className="relative w-full flex-1 min-h-0 flex items-center justify-center cursor-zoom-in" onClick={() => setShowFullScreen(true)}>
-                                                    <img src={ticket.originalImage || ticket.image} className="max-h-full w-auto rounded-xl shadow-md border border-slate-100" />
+                                                    <img src={ticket.images?.[0] || ticket.image} className="max-h-full w-auto rounded-xl shadow-md border border-slate-100" />
                                                 </div>
                                                 {ticket.serial && (<div className="w-full space-y-2 shrink-0 pb-4"><div className="bg-white p-2 rounded-xl border border-slate-100"><BarcodeCanvas text={ticket.serial} /></div><div className="flex justify-center p-2 bg-white rounded-xl border border-slate-100 shrink-0"><QRCodeCanvas text={ticket.serial} size={100} /></div></div>)}
                                             </div>
@@ -1239,9 +1242,9 @@
                         </div>
                     </div>
                 </div>
-                {showFullScreen && (ticket.originalImage || ticket.image) && (
+                {showFullScreen && (ticket.images?.[0] || ticket.image) && (
                     <div className="fixed inset-0 z-[60] bg-black flex items-center justify-center p-2 fullscreen-overlay" onClick={() => setShowFullScreen(false)}>
-                        <img src={ticket.originalImage || ticket.image} className="max-w-full max-h-full object-contain" />
+                        <img src={ticket.images?.[0] || ticket.image} className="max-w-full max-h-full object-contain" />
                         <button className="absolute top-6 right-6 px-4 py-2 bg-black/60 backdrop-blur-md text-white rounded-full flex items-center gap-2 font-bold shadow-lg border border-white/20 transition-transform active:scale-95" onClick={(e) => { e.stopPropagation(); setShowFullScreen(false); }}>
                             <X size={20}/> 關閉
                         </button>
@@ -1253,25 +1256,41 @@
 
         const AddTicketModal = ({ isOpen, onClose, onAddBatch, allTags, templates, specificViewKeywords }) => {
             if (!isOpen) return null;
+            const [activeTab, setActiveTab] = useState('manual'); 
+            const [pasteVal, setPasteVal] = useState('');
+            const [loading, setLoading] = useState(false);
             const [manualData, setManualData] = useState({ name: '', serial: '', expiry: '', note: '' });
             const [manualTags, setManualTags] = useState([]);
             const [image, setImage] = useState('');
-            const [originalImage, setOriginalImage] = useState('');
+            const [original, setOriginal] = useState('');
 
             const handleApplyTemplate = (tid) => {
                 const t = templates.find(tt => tt.id === tid);
                 if (t) {
                     setManualData(prev => ({ ...prev, name: t.productName }));
                     setImage(t.image || '');
-                    setOriginalImage(t.originalImage || '');
                     setManualTags(t.tags || []);
                 }
             };
 
             const handleManualSubmit = () => {
                 if (!manualData.name) { alert("請輸入名稱"); return; }
-                onAddBatch([{ id: 'task_' + Date.now(), productName: manualData.name, serial: manualData.serial, expiry: manualData.expiry.replace(/-/g, '/'), note: manualData.note, image: image, originalImage: originalImage, tags: manualTags, completed: false, isDeleted: false, createdAt: Date.now() }]);
+                onAddBatch([{ id: 'task_' + Date.now(), productName: manualData.name, serial: manualData.serial, expiry: manualData.expiry.replace(/-/g, '/'), note: manualData.note, images: original ? [original] : [], image: image, tags: manualTags, completed: false, isDeleted: false, createdAt: Date.now() }]);
                 onClose();
+            };
+
+            const handleImageUpload = async (e) => {
+                const file = e.target.files[0];
+                if(file) {
+                    try { 
+                        const [thumb, orig] = await Promise.all([
+                            compressImage(file, 0.4, 400),
+                            compressImage(file, 0.9, 1600)
+                        ]);
+                        setImage(thumb);
+                        setOriginal(orig);
+                    } catch(err) { alert("處理圖片時發生錯誤：" + err.message); }
+                }
             };
 
             return (
@@ -1279,6 +1298,7 @@
                     <div className="bg-white w-full sm:w-[450px] sm:rounded-3xl rounded-t-[32px] p-6 shadow-2xl max-h-[90vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
                         <div className="flex justify-between items-center mb-4"><h2 className="text-xl font-black text-slate-800">新增票券</h2><button onClick={onClose} className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200"><X size={18}/></button></div>
                         
+                        {/* [CR-FUNC] 範本選擇下拉選單 */}
                         {templates?.length > 0 && (
                             <div className="mb-4">
                                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1 mb-1 block">快速套用範本</label>
@@ -1290,30 +1310,7 @@
                         )}
 
                         <div className="space-y-3">
-                            {/* [CR-FUNC] 縮圖與原圖分開上傳介面 */}
-                            <div className="grid grid-cols-2 gap-4 mb-2">
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1 block">縮圖 (必填)</label>
-                                    <div className="aspect-square bg-slate-50 border border-dashed border-slate-300 rounded-2xl flex flex-col items-center justify-center relative overflow-hidden group">
-                                        {image ? <img src={image} className="w-full h-full object-cover"/> : <><ImageIcon className="text-slate-300 mb-1"/><span className="text-[9px] text-slate-400">上傳縮圖</span></>}
-                                        <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" onChange={async e => {
-                                            const file = e.target.files[0];
-                                            if(file) { const base64 = await compressImage(file, 0.4, 400); setImage(base64); }
-                                        }}/>
-                                    </div>
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1 block">原圖 (高品質)</label>
-                                    <div className="aspect-square bg-slate-50 border border-dashed border-slate-300 rounded-2xl flex flex-col items-center justify-center relative overflow-hidden group">
-                                        {originalImage ? <img src={originalImage} className="w-full h-full object-cover"/> : <><FileImage className="text-slate-300 mb-1"/><span className="text-[9px] text-slate-400">上傳原圖</span></>}
-                                        <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" onChange={async e => {
-                                            const file = e.target.files[0];
-                                            if(file) { const base64 = await compressImage(file, 0.9, 1600); setOriginalImage(base64); }
-                                        }}/>
-                                    </div>
-                                </div>
-                            </div>
-
+                            <div className="flex items-center gap-3"><div className="w-20 h-20 bg-slate-50 border border-dashed border-slate-300 rounded-2xl flex items-center justify-center relative overflow-hidden">{image ? <img src={image} className="w-full h-full object-cover"/> : <ImageIcon className="text-slate-300"/>}<input type="file" className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" onChange={handleImageUpload}/></div><div className="flex-1 text-xs font-bold text-slate-400">上傳票券照片 (建議上傳)</div></div>
                             <input className="w-full p-3.5 bg-slate-50 rounded-xl outline-none font-bold" placeholder="票券名稱 (必填)" value={manualData.name} onChange={e=>setManualData({...manualData, name: e.target.value})}/>
                             <TagSelectInput allTags={allTags} selectedTags={manualTags} onTagsChange={setManualTags} extraSuggestions={specificViewKeywords} />
                             <input className="w-full p-3.5 bg-slate-50 rounded-xl outline-none font-mono text-sm" placeholder="序號/代碼" value={manualData.serial} onChange={e=>setManualData({...manualData, serial: e.target.value})}/>
@@ -1328,11 +1325,34 @@
             );
         };
 
+        const TagManagerModal = ({ isOpen, onClose, tags, onDeleteTag }) => {
+            if(!isOpen) return null;
+            return (
+                <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 animate-fade-in" onClick={onClose}>
+                    <div className="bg-white w-full max-sm rounded-3xl p-6 max-h-[60vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
+                        <h2 className="text-xl font-black mb-4 text-slate-800">管理標籤</h2>
+                        {tags.length === 0 ? <p className="text-slate-400 text-center py-8 font-bold">目前沒有標籤</p> : (
+                            <div className="space-y-2">
+                                {tags.map(tag => (
+                                    <div key={tag} className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                        <span className="font-bold text-slate-600 text-sm">#{tag}</span>
+                                        <button onClick={() => onDeleteTag(tag)} className="text-red-400 hover:text-red-600 p-2 bg-white rounded-lg shadow-sm"><Trash2 size={16}/></button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        <button onClick={onClose} className="w-full mt-6 py-3 bg-slate-100 text-slate-500 rounded-2xl font-bold hover:bg-slate-200 transition-colors">關閉</button>
+                    </div>
+                </div>
+            );
+        };
+        
         const BatchEditModal = ({ isOpen, onClose, selectedCount, onBatchUpdate, allTags, templates }) => {
              const [tagsToAdd, setTagsToAdd] = useState([]);
              const [newName, setNewName] = useState('');
              const [newExpiry, setNewExpiry] = useState('');
              const [newImage, setNewImage] = useState('');
+             const [newOriginal, setNewOriginal] = useState('');
 
              if(!isOpen) return null;
 
@@ -1350,9 +1370,22 @@
                     productName: newName, 
                     expiry: newExpiry, 
                     image: newImage, 
+                    original: newOriginal,
                     tags: tagsToAdd 
                 }); 
                 onClose(); 
+             };
+
+             const handleImageUpload = async (e) => {
+                const file = e.target.files[0];
+                if(file) {
+                    const [thumb, orig] = await Promise.all([
+                        compressImage(file, 0.4, 400),
+                        compressImage(file, 0.9, 1600)
+                    ]);
+                    setNewImage(thumb);
+                    setNewOriginal(orig);
+                }
              };
 
              return (
@@ -1377,16 +1410,13 @@
                                 <input className="w-full p-3 bg-slate-50 rounded-xl outline-none font-bold" placeholder="留空則不變更" value={newName} onChange={e=>setNewName(e.target.value)}/>
                             </div>
                             <div>
-                                <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">變更縮圖 (批量僅改縮圖)</label>
+                                <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">變更縮圖</label>
                                 <div className="flex items-center gap-3">
                                     <div className="w-16 h-16 bg-slate-100 rounded-xl flex items-center justify-center border border-dashed border-slate-300 relative overflow-hidden">
                                         {newImage ? <img src={newImage} className="w-full h-full object-cover"/> : <ImageIcon className="text-slate-300" size={16}/>}
-                                        <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" onChange={async e => {
-                                            const file = e.target.files[0];
-                                            if(file) { const base64 = await compressImage(file, 0.4, 400); setNewImage(base64); }
-                                        }}/>
+                                        <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" onChange={handleImageUpload}/>
                                     </div>
-                                    <div className="text-[10px] text-slate-400 font-bold">點擊上傳新縮圖</div>
+                                    <div className="text-[10px] text-slate-400 font-bold">上傳新圖以覆蓋所選票券</div>
                                 </div>
                             </div>
                             <div>
@@ -1456,7 +1486,9 @@
                         if (dbSettings) {
                             const mergedSettings = {
                                 ...settings, ...dbSettings,
+                                bgConfigMap: dbSettings.bgConfigMap || {}, 
                                 templates: dbSettings.templates || [],
+                                specificViewKeywords: dbSettings.specificViewKeywords || ['MOMO', '85度C'], 
                                 viewConfigs: {
                                     active: migrateConfig(dbSettings.viewConfigs?.active),
                                     completed: migrateConfig(dbSettings.viewConfigs?.completed),
@@ -1498,6 +1530,22 @@
                     return true;
                 });
                 result.sort((a, b) => {
+                    const isExpiringA = !a.completed && !a.isDeleted && checkIsExpiringSoon(a.expiry, settings.notifyDays);
+                    const isExpiringB = !b.completed && !b.isDeleted && checkIsExpiringSoon(b.expiry, settings.notifyDays);
+                    if (isExpiringA !== isExpiringB) return isExpiringA ? -1 : 1;
+                    const isDupA = duplicateSerials.has(a.serial) && !a.completed && !a.isDeleted;
+                    const isDupB = duplicateSerials.has(b.serial) && !b.completed && !b.isDeleted;
+                    if (isDupA !== isDupB) return isDupA ? -1 : 1;
+                    if (sortType === 'newest') {
+                        if (view === 'completed') return (b.completedAt || 0) - (a.completedAt || 0);
+                        if (view === 'deleted') return (b.deletedAt || 0) - (a.deletedAt || 0);
+                        return b.createdAt - a.createdAt;
+                    }
+                    if (sortType === 'oldest') {
+                        if (view === 'completed') return (a.completedAt || 0) - (b.completedAt || 0);
+                        if (view === 'deleted') return (a.deletedAt || 0) - (b.deletedAt || 0);
+                        return a.createdAt - b.createdAt;
+                    }
                     if (sortType === 'expiring') {
                         const dateA = a.expiry ? new Date(a.expiry.replace(/\//g, '-')) : new Date(9999, 11, 31);
                         const dateB = b.expiry ? new Date(b.expiry.replace(/\//g, '-')) : new Date(9999, 11, 31);
@@ -1523,12 +1571,25 @@
                 const newStatus = !ticket.completed;
                 const completedAt = newStatus ? Date.now() : null; 
                 setTasks(prev => prev.map(t => t.id === ticket.id ? { ...t, completed: newStatus, completedAt: completedAt } : t));
+                if (newStatus && settings.tgToken && settings.tgChatId) {
+                   const msg = `✅ *[已核銷]* ${ticket.productName}\n🔢 序號: ${ticket.serial || '無'}\n⏰ 時間: ${formatDateTime(completedAt)}`;
+                   sendTelegramMessage(settings.tgToken, settings.tgChatId, msg).catch(e => console.error(e));
+                }
             };
 
             const handleDelete = (id, forceNotify = false) => {
                 const now = Date.now();
+                if (forceNotify && settings.tgToken && settings.tgChatId) {
+                    const target = tasks.find(t => t.id === id);
+                    if (target) {
+                        const msg = `🗑️ *[已刪除 (視同核銷)]*\n方案: ${target.productName}\n序號: \`${target.serial || '無'}\`\n時間: ${formatDateTime(now)}`;
+                        sendTelegramMessage(settings.tgToken, settings.tgChatId, msg).catch(e => console.error(e));
+                    }
+                }
                 if(view === 'deleted') { if(confirm("確定永久刪除？")) setTasks(prev => prev.filter(t => t.id !== id)); }
-                else { setTasks(prev => prev.map(t => id === t.id ? { ...t, isDeleted: true, deletedAt: now } : t)); }
+                else {
+                    setTasks(prev => prev.map(t => id === t.id ? { ...t, isDeleted: true, deletedAt: now } : t));
+                }
             };
 
             const handleRestore = (ticket) => setTasks(prev => prev.map(t => t.id === ticket.id ? { ...t, isDeleted: false, deletedAt: null } : t));
@@ -1537,7 +1598,7 @@
             const handleBackup = () => {
                 const backupData = { version: 3, timestamp: Date.now(), settings: settings, tasks: tasks };
                 const blob = new Blob([JSON.stringify(backupData, null, 2)], {type: "application/json"});
-                const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `ticket_backup_${new Date().toISOString().split('T')[0]}.json`; a.click();
+                const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `ticket_backup_idb_${new Date().toISOString().split('T')[0]}.json`; a.click();
             };
             
             const handleImportClick = () => {
@@ -1552,19 +1613,43 @@
             const executeImport = (mode, restoreSettings) => {
                 if (!importPendingData) return;
                 const importedTasks = Array.isArray(importPendingData) ? importPendingData : (importPendingData.tasks || []);
-                if (restoreSettings && importPendingData.settings) setSettings(importPendingData.settings);
+                
+                if (restoreSettings && importPendingData.settings) {
+                    const impSet = importPendingData.settings;
+                    setSettings(prev => ({
+                        ...prev, ...impSet,
+                        templates: impSet.templates || [],
+                        specificViewKeywords: impSet.specificViewKeywords || ['MOMO', '85度C'],
+                        viewConfigs: {
+                            active: migrateConfig(impSet.viewConfigs?.active),
+                            completed: migrateConfig(impSet.viewConfigs?.completed),
+                            deleted: migrateConfig(impSet.viewConfigs?.deleted),
+                        }
+                    }));
+                }
+                
                 if (mode === 'append') setTasks(prev => [...prev, ...importedTasks]);
                 else setTasks(importedTasks);
                 setImportPendingData(null);
+                alert(`匯入成功！共 ${importedTasks.length} 筆票券。`);
             };
 
             const handleFullReset = async () => {
-                if (window.confirm("確定重設嗎？")) { await dbHelper.removeItem('wallet_tasks_v3'); window.location.reload(); }
+                if (window.confirm("⚠️ 注意：這將刪除所有票券、設定與背景紀錄，且無法復原。確定要徹底重設嗎？")) {
+                    if (window.confirm("🔴 再次確認：刪除後資料將無法找回。真的要執行嗎？")) {
+                        await dbHelper.removeItem('wallet_tasks_v3');
+                        await dbHelper.removeItem('wallet_settings_v3');
+                        await dbHelper.removeItem('wallet_bg_history_v3');
+                        localStorage.removeItem('last_notify_date_v3');
+                        window.location.reload();
+                    }
+                }
             };
             
             const handleSelect = (id) => { const s = new Set(selectedIds); if(s.has(id)) s.delete(id); else s.add(id); setSelectedIds(s); };
             const handleSelectAll = () => setSelectedIds(selectedIds.size === filteredTasks.length ? new Set() : new Set(filteredTasks.map(t => t.id)));
             
+            // [CR-FUNC] 批量更新邏輯實作
             const handleBatchUpdate = (data) => {
                 setTasks(prev => prev.map(t => {
                     if (!selectedIds.has(t.id)) return t;
@@ -1572,6 +1657,7 @@
                     if (data.productName) nt.productName = data.productName;
                     if (data.expiry) nt.expiry = data.expiry.replace(/-/g, '/');
                     if (data.image) nt.image = data.image;
+                    if (data.original) nt.images = [data.original, ...(t.images || []).filter(img => img !== data.original)];
                     if (data.tags && data.tags.length > 0) nt.tags = Array.from(new Set([...(t.tags || []), ...data.tags]));
                     return nt;
                 }));
@@ -1579,43 +1665,46 @@
                 setIsSelectionMode(false);
             };
 
-            const handleSaveSettings = (newSettings) => setSettings(newSettings);
-            const handleRemoveHistory = (url) => setBgHistory(prev => prev.filter(item => item !== url));
-            const handleAddToHistory = (newBg) => setBgHistory(prev => [newBg, ...prev.filter(bg => bg !== newBg)].slice(0, 20));
+            const handleSaveSettings = (newSettings) => {
+                setSettings(newSettings);
+                const imagesToAdd = [newSettings.viewConfigs.active.backgroundImage, newSettings.viewConfigs.completed.backgroundImage, newSettings.viewConfigs.deleted.backgroundImage].filter(Boolean);
+                if (imagesToAdd.length > 0) setBgHistory(prev => [...new Set([...imagesToAdd, ...prev])].slice(0, 20));
+            };
+            const handleRemoveHistory = (url) => { if(confirm("確定要移除此背景紀錄嗎？")) setBgHistory(prev => prev.filter(item => item !== url)); };
+            const handleAddToHistory = (newBg) => { if (newBg) setBgHistory(prev => [newBg, ...prev.filter(bg => bg !== newBg)].slice(0, 20)); };
             const handleQuickBgChange = () => {
                 const history = [''].concat(bgHistory);
-                // [CR-FUNC] 快速切換背景統一寫回 'active'
-                const currentBg = settings.viewConfigs.active.backgroundImage || '';
+                const currentBg = settings.viewConfigs[view].backgroundImage || '';
                 const nextBg = history[(history.indexOf(currentBg) + 1) % history.length] || '';
                 setSettings(prev => {
                     let next = { ...prev };
-                    let activeView = { ...next.viewConfigs.active, backgroundImage: nextBg };
-                    next.viewConfigs = { ...next.viewConfigs, active: activeView };
+                    let currentView = { ...next.viewConfigs[view], backgroundImage: nextBg };
+                    const sharedConfig = next.bgConfigMap?.[nextBg];
+                    if (sharedConfig) { currentView.bgSize = sharedConfig.bgSize; currentView.bgPosY = sharedConfig.bgPosY; }
+                    next.viewConfigs = { ...next.viewConfigs, [view]: currentView };
                     return next;
                 });
             };
 
-            if (!isDataLoaded) return <div className="fixed inset-0 bg-slate-50 flex items-center justify-center">載入中...</div>;
-            
-            // [CR-FUNC] 強制所有分頁共用 'active' 配置
-            const currentConfig = settings.viewConfigs.active || defaultViewConfig;
+            if (!isDataLoaded) return <div className="fixed inset-0 bg-slate-50 flex flex-col items-center justify-center gap-4"><Loader2 className="w-12 h-12 text-sky-500 animate-spin" /><p className="text-slate-400 font-bold animate-pulse">正在載入資料庫...</p></div>;
+            const currentConfig = settings.viewConfigs[view] || defaultViewConfig;
 
             return (
                 <>
-                    {currentConfig.backgroundImage && <div className="fixed inset-0 z-0 mx-auto max-w-md" style={{ top: '150px', backgroundImage: `url(${currentConfig.backgroundImage})`, backgroundSize: `${currentConfig.bgSize || 100}% auto`, backgroundPosition: `center ${currentConfig.bgPosY || 50}%`, backgroundRepeat: 'no-repeat', opacity: currentConfig.bgOpacity || 1 }} />}
+                    {currentConfig.backgroundImage && <div className="fixed inset-0 z-0 mx-auto max-w-md transition-all duration-500" style={{ top: '150px', backgroundImage: `url(${currentConfig.backgroundImage})`, backgroundSize: `${currentConfig.bgSize || 100}% auto`, backgroundPosition: `center ${currentConfig.bgPosY || 50}%`, backgroundRepeat: 'no-repeat', opacity: currentConfig.bgOpacity || 1 }} />}
                     
-                    <div className="max-w-md mx-auto min-h-screen relative shadow-2xl sm:border-x border-slate-200 z-10" style={{ backgroundColor: currentConfig.backgroundImage ? 'transparent' : '#f8fafc' }}>
+                    <div className="max-w-md mx-auto min-h-screen relative shadow-2xl sm:border-x border-slate-200 transition-all duration-500 z-10" style={{ backgroundColor: currentConfig.backgroundImage ? 'transparent' : '#f8fafc' }}>
                         <Header 
                             appTitle={settings.appTitle} onTitleChange={(t) => setSettings(s => ({...s, appTitle: t}))}
                             onOpenSettings={() => setShowSettings(true)}
                             onOpenMenu={() => setShowDataModal(true)}
                             sortType={sortType} setSortType={setSortType} searchQuery={searchQuery} setSearchQuery={setSearchQuery} isSelectionMode={isSelectionMode} setIsSelectionMode={setIsSelectionMode} selectedCount={selectedIds.size} onSelectAll={handleSelectAll} isCompact={isCompact} setIsCompact={setIsCompact} view={view} setView={setView} activeTag={activeTag} setActiveTag={setActiveTag} allTags={allTags} onQuickBgChange={handleQuickBgChange} headerBackgroundImage={currentConfig.headerBackgroundImage}
                         />
-                        <div className="pt-2 min-h-[50vh] transition-colors">{filteredTasks.length > 0 ? filteredTasks.map(t => <TicketCard key={t.id} ticket={t} onClick={setSelectedTicket} notifyDays={settings.notifyDays} isSelectionMode={isSelectionMode} isSelected={selectedIds.has(t.id)} onSelect={handleSelect} isDuplicate={duplicateSerials.has(t.serial)} opacity={currentConfig.cardOpacity} cardBgColor={currentConfig.cardBgColor} cardBorderColor={currentConfig.cardBorderColor} isCompact={isCompact} compactHeight={currentConfig.compactHeight} compactShowImage={currentConfig.compactShowImage} />) : <div className="text-center py-24 text-slate-300"><p className="font-bold">暫無票券</p></div>}</div>
+                        <div className="pt-2 min-h-[50vh] transition-colors">{filteredTasks.length > 0 ? filteredTasks.map(t => <TicketCard key={t.id} ticket={t} onClick={setSelectedTicket} notifyDays={settings.notifyDays} isSelectionMode={isSelectionMode} isSelected={selectedIds.has(t.id)} onSelect={handleSelect} isDuplicate={duplicateSerials.has(t.serial)} opacity={currentConfig.cardOpacity} cardBgColor={currentConfig.cardBgColor} cardBorderColor={currentConfig.cardBorderColor} isCompact={isCompact} compactHeight={currentConfig.compactHeight} compactShowImage={currentConfig.compactShowImage} />) : <div className="text-center py-24 text-slate-300"><i className="fas fa-ticket-alt text-5xl mb-4 opacity-30"></i><p className="font-bold">暫無票券</p></div>}</div>
                         
                         {isSelectionMode ? (
                             <div className="fixed bottom-10 left-1/2 -translate-x-1/2 flex gap-3 z-40 animate-slide-up">
-                                {selectedIds.size > 0 && <><button onClick={() => setShowBatchModal(true)} className="bg-sky-500 text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-sky-200 flex items-center gap-2"><Pencil size={18}/> 批量編輯</button><button onClick={() => { if(confirm(`確定刪除 ${selectedIds.size} 項目？`)) { if(view === 'deleted') setTasks(prev => prev.filter(t => !selectedIds.has(t.id))); else { const now = Date.now(); setTasks(prev => prev.map(t => selectedIds.has(t.id) ? { ...t, isDeleted: true, deletedAt: now } : t)); } setSelectedIds(new Set()); setIsSelectionMode(false); } }} className="bg-white text-red-500 border border-red-100 px-4 py-3 rounded-2xl font-bold shadow-lg"><Trash2 size={18}/></button></>}
+                                {selectedIds.size > 0 && <><button onClick={() => setShowBatchModal(true)} className="bg-sky-500 hover:bg-sky-600 text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-sky-200 flex items-center gap-2"><Pencil size={18}/> 批量編輯</button><button onClick={() => { if(confirm(`確定刪除 ${selectedIds.size} 項目？`)) { if(view === 'deleted') setTasks(prev => prev.filter(t => !selectedIds.has(t.id))); else { const now = Date.now(); setTasks(prev => prev.map(t => selectedIds.has(t.id) ? { ...t, isDeleted: true, deletedAt: now } : t)); } setSelectedIds(new Set()); setIsSelectionMode(false); } }} className="bg-white text-red-500 border border-red-100 px-4 py-3 rounded-2xl font-bold shadow-lg flex items-center gap-2 hover:bg-red-50"><Trash2 size={18}/></button></>}
                                 <button onClick={() => {setIsSelectionMode(false); setSelectedIds(new Set());}} className="bg-slate-800 text-white px-4 py-3 rounded-2xl font-bold shadow-lg">取消</button>
                             </div>
                         ) : <button onClick={() => setShowAddModal(true)} className="fixed bottom-10 right-5 w-16 h-16 bg-sky-500 text-white rounded-[24px] shadow-2xl flex items-center justify-center text-3xl active:scale-90 transition-transform z-40"><Plus size={32}/></button>}
@@ -1638,4 +1727,3 @@
     </script>
 </body>
 </html>
-
