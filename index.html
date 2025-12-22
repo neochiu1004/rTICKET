@@ -113,7 +113,7 @@
             ImagePlus, Heart, HeartHandshake, Eye, EyeOff, Globe, BookOpen, Star, History, MousePointerClick, Layers,
             CalendarX2, CopyPlus, Lightbulb, Loader2, QrCode, SlidersHorizontal, ArrowUpDown, Image, CheckCheck, SendHorizontal, XCircle, Droplets,
             MoveVertical, BoxSelect, Monitor, Palette, Rows, LayoutGrid, ChevronRight, ChevronDown as ChevronDownIcon,
-            PanelTop, PaintBucket, Maximize, Move, Eye as PreviewIcon, Info, MapPin, DatabaseBackup, ArchiveRestore, Eraser, Settings2, BookTemplate
+            PanelTop, PaintBucket, Maximize, Move, Eye as PreviewIcon, Info, MapPin, DatabaseBackup, ArchiveRestore, Eraser, Settings2, BookTemplate, FileImage
         } from 'lucide-react';
 
         // --- 1. Core Logic (Helpers & DB) ---
@@ -170,34 +170,92 @@
             }
         };
 
+        const parseBatchTicketInfo = (text, overrideName) => {
+            const results = [];
+            const lines = text.split(/\r?\n/);
+            for (let i = 0; i < lines.length; i++) {
+                const rawLine = lines[i];
+                const line = rawLine.trim();
+                if (!line) continue;
+
+                const serialMatch = line.match(/(?:票券序號|券號|券號：|序號|CODE|Code|密碼|PIN)[:：\s]*([A-Za-z0-9]{8,})/i);
+                
+                if (serialMatch && serialMatch[1]) {
+                    const serialStr = serialMatch[1].trim();
+                    let dateStr = "";
+                    let finalName = overrideName || "";
+
+                    const startIdx = Math.max(0, i - 2);
+                    const endIdx = Math.min(lines.length - 1, i + 5);
+
+                    for (let j = startIdx; j <= endIdx; j++) {
+                        const windowLine = lines[j].trim();
+                        if (!windowLine) continue;
+
+                        if (!dateStr) {
+                            const dateMatch = windowLine.match(/\d{4}[\/\-\.]\d{2}[\/\-\.]\d{2}/);
+                            if (dateMatch) dateStr = dateMatch[0].replace(/[\.\-]/g, '/');
+                        }
+
+                        if (!finalName) {
+                            const bracketMatch = windowLine.match(/【([^】]+)】/);
+                            if (bracketMatch) finalName = bracketMatch[1].trim();
+                        }
+                    }
+
+                    if (!finalName) {
+                         if (i > 0 && lines[i-1].trim().length > 2) finalName = lines[i-1].trim();
+                         else finalName = "未命名票券";
+                    }
+
+                    results.push({
+                        id: 'task_' + Date.now() + '_' + i + '_' + Math.random().toString(36).substr(2,5),
+                        text: rawLine, originalRaw: rawLine,
+                        isTicket: true, serial: serialStr, productName: finalName, expiry: dateStr,
+                        tags: [], images: [], image: '', originalImage: '', completed: false, isDeleted: false, createdAt: Date.now(), note: '',
+                    });
+                }
+            }
+            return results;
+        };
+
         const compressImage = (fileOrUrl, quality = 0.8, maxWidth = 1200) => {
             return new Promise((resolve, reject) => {
                 const img = new window.Image();
                 img.crossOrigin = "Anonymous";
+                
                 let objectUrl = null;
+
                 img.onload = () => {
                     if (img.width * img.height > 16000000) {
                         if (objectUrl) URL.revokeObjectURL(objectUrl);
                         reject(new Error("Image resolution too high"));
                         return;
                     }
+
                     const canvas = document.createElement('canvas');
                     let width = img.width; 
                     let height = img.height;
+
                     if (width > maxWidth) {
                         height = Math.round((height * maxWidth) / width);
                         width = maxWidth;
                     }
+                    
                     canvas.width = width; canvas.height = height;
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0, width, height);
+                    
                     if (objectUrl) URL.revokeObjectURL(objectUrl);
+                    
                     resolve(canvas.toDataURL('image/webp', quality));
                 };
+                
                 img.onerror = (err) => {
                     if (objectUrl) URL.revokeObjectURL(objectUrl);
                     reject(err);
                 };
+
                 if (typeof fileOrUrl === 'string') {
                     img.src = fileOrUrl;
                 } else { 
@@ -253,8 +311,12 @@
                 const url = `https://api.telegram.org/bot${token}/sendMessage?chat_id=${chatId}&text=${encodeURIComponent(text)}&parse_mode=Markdown`;
                 const response = await fetch(url);
                 const data = await response.json();
-                if (data.ok) return { success: true };
-                else return { success: false, error: data.description };
+                
+                if (data.ok) {
+                    return { success: true };
+                } else {
+                    return { success: false, error: data.description };
+                }
             } catch (error) {
                 return { success: false, error: error.message };
             }
@@ -276,13 +338,18 @@
 
         const TagSelectInput = ({ allTags, selectedTags, onTagsChange, extraSuggestions = [] }) => {
             const [inputVal, setInputVal] = useState('');
-            const availableSuggestions = useMemo(() => [...new Set([...allTags, ...(extraSuggestions || [])])], [allTags, extraSuggestions]);
+            
+            const availableSuggestions = useMemo(() => {
+                return [...new Set([...allTags, ...(extraSuggestions || [])])];
+            }, [allTags, extraSuggestions]);
+
             const handleAdd = (tag) => {
                 if(!selectedTags.includes(tag)) onTagsChange([...selectedTags, tag]);
                 setInputVal('');
             };
             const handleRemove = (tag, e) => {
-                e.preventDefault(); e.stopPropagation();
+                e.preventDefault(); 
+                e.stopPropagation();
                 onTagsChange(selectedTags.filter(t => t !== tag));
             };
             return (
@@ -305,6 +372,11 @@
                             </div>
                         )}
                     </div>
+                    <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+                        {availableSuggestions.filter(t => !selectedTags.includes(t)).slice(0, 8).map(t => (
+                            <button key={t} onClick={() => handleAdd(t)} className="text-xs font-bold bg-slate-100 text-slate-500 px-3 py-1.5 rounded-full whitespace-nowrap hover:bg-slate-200 transition-colors">+ {t}</button>
+                        ))}
+                    </div>
                 </div>
             );
         };
@@ -324,8 +396,6 @@
 
         const SettingsModal = ({ isOpen, onClose, settings, bgHistory, onSave, onRemoveHistory, onAddToHistory }) => {
             const [localSettings, setLocalSettings] = useState(settings ? JSON.parse(JSON.stringify(settings)) : {});
-            // [CR-FUNC] 強制固定為 'active' 以實作全域背景統一
-            const currentTab = 'active'; 
             const [testStatus, setTestStatus] = useState(null);
             const [newKw, setNewKw] = useState('');
             const headerFileInputRef = useRef(null);
@@ -333,6 +403,8 @@
 
             if(!isOpen) return null;
 
+            // [CR-FUNC] 僅固定操作 'active' 設定，實現背景統一化
+            const currentTab = 'active';
             const currentViewConfig = localSettings.viewConfigs?.[currentTab] || { ...defaultViewConfig };
 
             const handleGlobalChange = (key, value) => {
@@ -342,7 +414,9 @@
             const handleAddKw = () => {
                 if (!newKw.trim()) return;
                 const kws = localSettings.specificViewKeywords || [];
-                if (!kws.includes(newKw.trim())) handleGlobalChange('specificViewKeywords', [...kws, newKw.trim()]);
+                if (!kws.includes(newKw.trim())) {
+                    handleGlobalChange('specificViewKeywords', [...kws, newKw.trim()]);
+                }
                 setNewKw('');
             };
 
@@ -355,15 +429,25 @@
                 setLocalSettings(prev => {
                     let next = { ...prev };
                     let currentView = { ...next.viewConfigs[currentTab] };
+                    
                     currentView[key] = value;
+                    
                     const imageUrl = currentView.backgroundImage;
                     if (!next.bgConfigMap) next.bgConfigMap = {};
+                    
                     if (key === 'backgroundImage' && value) {
                         const sharedConfig = next.bgConfigMap[value];
-                        if (sharedConfig) { currentView.bgSize = sharedConfig.bgSize; currentView.bgPosY = sharedConfig.bgPosY; }
+                        if (sharedConfig) {
+                            currentView.bgSize = sharedConfig.bgSize;
+                            currentView.bgPosY = sharedConfig.bgPosY;
+                        }
                     } else if (imageUrl && (key === 'bgSize' || key === 'bgPosY')) {
-                        next.bgConfigMap[imageUrl] = { ...next.bgConfigMap[imageUrl], [key]: value };
+                        next.bgConfigMap[imageUrl] = {
+                            ...next.bgConfigMap[imageUrl],
+                            [key]: value
+                        };
                     }
+                    
                     next.viewConfigs = { ...next.viewConfigs, [currentTab]: currentView };
                     return next;
                 });
@@ -374,8 +458,12 @@
                 let nextVal = parseFloat(currentVal || 0) + (delta * stepVal);
                 nextVal = Math.min(max, Math.max(min, nextVal));
                 nextVal = Math.round(nextVal * 100) / 100;
-                if (isViewConfig) handleViewConfigChange(key, nextVal);
-                else handleGlobalChange(key, nextVal);
+
+                if (isViewConfig) {
+                    handleViewConfigChange(key, nextVal);
+                } else {
+                    handleGlobalChange(key, nextVal);
+                }
             };
 
             const handleSave = () => {
@@ -386,101 +474,133 @@
             const handleHeaderBgUpload = async (e) => {
                 const file = e.target.files[0];
                 if(file) {
-                    try { const base64 = await compressImage(file, 0.8, 1600); handleViewConfigChange('headerBackgroundImage', base64); } 
-                    catch(err) { alert("錯誤：" + err.message); }
+                    try {
+                        const base64 = await compressImage(file, 0.8, 1600);
+                        handleViewConfigChange('headerBackgroundImage', base64);
+                    } catch(err) { alert("處理圖片時發生錯誤：" + err.message); }
                 }
             }
 
             const handleGalleryUpload = async (e) => {
                 const file = e.target.files[0];
                 if(file) {
-                    try { const base64 = await compressImage(file, 0.8, 1600); if(onAddToHistory) onAddToHistory(base64); } 
-                    catch(err) { alert("錯誤：" + err.message); }
+                    try {
+                        const base64 = await compressImage(file, 0.8, 1600);
+                        if(onAddToHistory) onAddToHistory(base64); 
+                    } catch(err) { alert("處理圖片時發生錯誤：" + err.message); }
+                }
+            };
+
+            const handleTest = async () => {
+                setTestStatus('sending');
+                const result = await sendTelegramMessage(localSettings.tgToken, localSettings.tgChatId, "🔔 這是一則來自「離線票券管家」的測試訊息。");
+                if (result.success) {
+                    setTestStatus('success');
+                    setTimeout(() => setTestStatus(null), 3000);
+                } else {
+                    setTestStatus('error');
+                    alert(`發送失敗: ${result.error}`);
                 }
             };
 
             return (
                 <div className="fixed inset-0 bg-slate-900/40 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-fade-in" onClick={onClose}>
                     <div className="bg-white w-full max-sm rounded-3xl p-6 shadow-2xl scale-100 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-                        <h2 className="text-xl font-bold mb-6 flex items-center gap-2 text-slate-800"><CloudCog size={24} className="text-sky-500"/> 系統與背景設定</h2>
+                        <h2 className="text-xl font-bold mb-6 flex items-center gap-2 text-slate-800"><CloudCog size={24} className="text-sky-500"/> 系統設定</h2>
                         
                         <div className="space-y-5">
                             <div>
                                 <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 block">通知天數 (紅框顯示)</label>
                                 <div className="flex items-center gap-2">
-                                    <button onClick={() => handleStep('notifyDays', -1, 1, 99, false)} className="w-9 h-9 flex items-center justify-center bg-slate-100 rounded-xl text-slate-500"><Minus size={16}/></button>
-                                    <input type="number" value={localSettings.notifyDays} onChange={e => handleGlobalChange('notifyDays', e.target.value)} className="flex-1 p-2.5 bg-slate-50 rounded-xl text-sm font-bold text-center outline-none focus:ring-2 focus:ring-sky-400"/>
-                                    <button onClick={() => handleStep('notifyDays', 1, 1, 99, false)} className="w-9 h-9 flex items-center justify-center bg-slate-100 rounded-xl text-slate-500"><Plus size={16}/></button>
+                                    <button onClick={() => handleStep('notifyDays', -1, 1, 99, false)} className="w-9 h-9 flex items-center justify-center bg-slate-100 rounded-xl text-slate-500 hover:bg-slate-200 transition-colors"><Minus size={16}/></button>
+                                    <input type="number" value={localSettings.notifyDays} onChange={e => handleGlobalChange('notifyDays', e.target.value)} className="flex-1 p-2.5 bg-slate-50 rounded-xl text-sm font-bold text-center text-slate-700 outline-none focus:ring-2 focus:ring-sky-400"/>
+                                    <button onClick={() => handleStep('notifyDays', 1, 1, 99, false)} className="w-9 h-9 flex items-center justify-center bg-slate-100 rounded-xl text-slate-500 hover:bg-slate-200 transition-colors"><Plus size={16}/></button>
                                 </div>
                             </div>
 
                             <div className="border-t border-slate-100 pt-4">
-                                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 block">外觀與背景 (全域統一設定)</label>
-                                <div className="space-y-4">
+                                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 block">特定畫面觸發關鍵字 (MOMO模式)</label>
+                                <div className="flex gap-2 mb-3 pr-1">
+                                    <input value={newKw} onChange={e => setNewKw(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddKw()} placeholder="輸入關鍵字 (如: MOMO, 85度C)..." className="flex-1 p-2 bg-slate-50 rounded-lg text-sm outline-none border-none focus:ring-1 focus:ring-sky-400 min-w-0"/>
+                                    <button onClick={handleAddKw} className="px-4 bg-sky-500 text-white rounded-lg font-bold shrink-0"><Plus size={18}/></button>
+                                </div>
+                                <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto no-scrollbar">
+                                    {(localSettings.specificViewKeywords || []).map(kw => (
+                                        <span key={kw} className="bg-slate-100 text-slate-600 px-2 py-1 rounded-md text-xs font-bold flex items-center gap-1">
+                                            {kw} <X size={10} className="cursor-pointer hover:text-red-500" onClick={() => handleRemoveKw(kw)}/>
+                                        </span>
+                                    ))}
+                                    {(!localSettings.specificViewKeywords || localSettings.specificViewKeywords.length === 0) && <span className="text-[10px] text-slate-300">預設：MOMO, 85度C</span>}
+                                </div>
+                            </div>
+                            
+                            <div className="border-t border-slate-100 pt-4">
+                                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 block">外觀與背景設定 (全域生效)</label>
+                                
+                                <div className="space-y-4 animate-fade-in">
                                     <div className="bg-slate-50 p-3 rounded-xl space-y-2">
                                         <div className="flex justify-between items-center">
                                             <label className="text-xs font-bold text-slate-500 flex items-center gap-1"><PanelTop size={12}/> 頂部功能區背景</label>
-                                            {currentViewConfig.headerBackgroundImage && <button onClick={() => handleViewConfigChange('headerBackgroundImage', '')} className="text-[10px] text-red-500 font-bold hover:underline">移除</button>}
+                                            {currentViewConfig.headerBackgroundImage && (
+                                                <button onClick={() => handleViewConfigChange('headerBackgroundImage', '')} className="text-[10px] text-red-500 font-bold hover:underline">移除</button>
+                                            )}
                                         </div>
                                         <div className="flex gap-2 items-center">
-                                            <div className="w-10 h-10 rounded-lg bg-slate-200 bg-cover bg-center border border-slate-300" style={{backgroundImage: currentViewConfig.headerBackgroundImage ? `url(${currentViewConfig.headerBackgroundImage})` : 'none'}}></div>
-                                            <button onClick={() => headerFileInputRef.current?.click()} className="flex-1 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-bold">更換圖片</button>
+                                            <div className="w-10 h-10 rounded-lg bg-slate-200 bg-cover bg-center border border-slate-300 flex-shrink-0" style={{backgroundImage: currentViewConfig.headerBackgroundImage ? `url(${currentViewConfig.headerBackgroundImage})` : 'none'}}></div>
+                                            <button onClick={() => headerFileInputRef.current?.click()} className="flex-1 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-50">
+                                                更換圖片
+                                            </button>
                                             <input type="file" ref={headerFileInputRef} accept="image/*" onChange={handleHeaderBgUpload} className="hidden" />
                                         </div>
                                     </div>
 
                                     <div>
-                                        <div className="text-xs font-bold text-slate-500 mb-2">背景圖片選取</div>
+                                        <div className="text-xs font-bold text-slate-500 mb-2 flex justify-between">
+                                            <span>曾經使用的背景 (主畫面)</span>
+                                            {bgHistory.length === 0 && <span className="text-slate-300 font-normal">尚無紀錄</span>}
+                                        </div>
                                         <div className="grid grid-cols-4 gap-2 mb-2">
-                                            <div onClick={() => galleryInputRef.current?.click()} className="w-full h-12 rounded-lg bg-sky-50 border border-dashed border-sky-200 text-sky-500 flex items-center justify-center cursor-pointer">
-                                                <Plus size={16} strokeWidth={3} /><input type="file" ref={galleryInputRef} accept="image/*" onChange={handleGalleryUpload} className="hidden" />
+                                            <div 
+                                                onClick={() => galleryInputRef.current?.click()}
+                                                className="w-full h-12 rounded-lg bg-sky-50 border border-dashed border-sky-200 text-sky-500 hover:bg-sky-100 hover:border-sky-300 flex items-center justify-center cursor-pointer transition-colors"
+                                                title="上傳圖片到此列表"
+                                            >
+                                                <Plus size={16} strokeWidth={3} />
+                                                <input type="file" ref={galleryInputRef} accept="image/*" onChange={handleGalleryUpload} className="hidden" />
                                             </div>
+
                                             {bgHistory.map((bgUrl, idx) => (
                                                 <div key={idx} className="relative group">
-                                                    <button onClick={() => handleViewConfigChange('backgroundImage', bgUrl)} className="w-full h-12 rounded-lg bg-cover bg-center border border-slate-200" style={{ backgroundImage: `url(${bgUrl})` }}>
-                                                        {currentViewConfig.backgroundImage === bgUrl && <div className="absolute inset-0 bg-black/40 flex items-center justify-center rounded-lg"><Check size={16} className="text-white"/></div>}
+                                                    <button 
+                                                        onClick={() => handleViewConfigChange('backgroundImage', bgUrl)}
+                                                        className="w-full h-12 rounded-lg bg-cover bg-center border border-slate-200 hover:scale-105 transition-transform shadow-sm"
+                                                        style={{ backgroundImage: `url(${bgUrl})` }}
+                                                    >
+                                                        {currentViewConfig.backgroundImage === bgUrl && (
+                                                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center rounded-lg">
+                                                                <Check size={16} className="text-white"/>
+                                                            </div>
+                                                        )}
                                                     </button>
-                                                    <button onClick={(e) => { e.stopPropagation(); onRemoveHistory(bgUrl); }} className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"><X size={10}/></button>
+                                                    <button 
+                                                        onClick={(e) => { e.stopPropagation(); onRemoveHistory(bgUrl); }}
+                                                        className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                                                        title="移除此紀錄"
+                                                    >
+                                                        <X size={10}/>
+                                                    </button>
                                                 </div>
                                             ))}
-                                            <button onClick={() => handleViewConfigChange('backgroundImage', '')} className="w-full h-12 rounded-lg bg-slate-100 border border-slate-200 text-slate-400 text-xs font-bold">無</button>
-                                        </div>
-                                    </div>
-
-                                    {/* 背景位置與樣式控制 */}
-                                    <div className="bg-slate-50 p-3 rounded-xl space-y-3">
-                                        <div>
-                                            <div className="flex justify-between items-center mb-1">
-                                                <label className="text-xs font-bold text-slate-500 flex items-center gap-1"><Maximize size={12}/> 背景寬度 {currentViewConfig.bgSize || 100}%</label>
-                                            </div>
-                                            <input type="range" min="50" max="300" step="5" value={currentViewConfig.bgSize || 100} onChange={(e) => handleViewConfigChange('bgSize', parseInt(e.target.value))} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-sky-500"/>
-                                        </div>
-                                        <div>
-                                            <div className="flex justify-between items-center mb-1">
-                                                <label className="text-xs font-bold text-slate-500 flex items-center gap-1"><Move size={12}/> 垂直位置 {currentViewConfig.bgPosY || 50}%</label>
-                                            </div>
-                                            <input type="range" min="0" max="100" step="1" value={currentViewConfig.bgPosY || 50} onChange={(e) => handleViewConfigChange('bgPosY', parseInt(e.target.value))} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-sky-500"/>
-                                        </div>
-                                        <div>
-                                            <div className="flex justify-between items-center mb-2">
-                                                <label className="text-xs font-bold text-slate-500 flex items-center gap-1"><Droplets size={12}/> 背景透明度 {Math.round((currentViewConfig.bgOpacity || 1) * 100)}%</label>
-                                            </div>
-                                            <input type="range" min="0" max="100" step="5" value={Math.round((currentViewConfig.bgOpacity || 1) * 100)} onChange={(e) => handleViewConfigChange('bgOpacity', (parseInt(e.target.value) / 100))} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-sky-500"/>
+                                            <button 
+                                                onClick={() => handleViewConfigChange('backgroundImage', '')}
+                                                className="w-full h-12 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-200 text-xs font-bold"
+                                                title="使用純白背景"
+                                            >
+                                                無
+                                            </button>
                                         </div>
                                     </div>
                                     
-                                    <div className="bg-slate-50 p-3 rounded-xl space-y-3">
-                                        <div className="flex justify-between items-center">
-                                            <label className="text-xs font-bold text-slate-500 flex items-center gap-1"><Palette size={12}/> 卡片底色</label>
-                                            <input type="color" value={currentViewConfig.cardBgColor} onChange={e => handleViewConfigChange('cardBgColor', e.target.value)} className="w-6 h-6 rounded cursor-pointer"/>
-                                        </div>
-                                        <div className="flex justify-between items-center">
-                                            <label className="text-xs font-bold text-slate-500 flex items-center gap-1"><PaintBucket size={12}/> 卡片邊框</label>
-                                            <input type="color" value={currentViewConfig.cardBorderColor || '#e2e8f0'} onChange={e => handleViewConfigChange('cardBorderColor', e.target.value)} className="w-6 h-6 rounded cursor-pointer"/>
-                                        </div>
-                                    </div>
-                                    
-                                    {/* 範本列表展示 */}
                                     <div className="border-t border-slate-100 pt-4">
                                         <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block flex items-center gap-1"><BookTemplate size={12}/> 已儲存範本</label>
                                         <div className="space-y-2 max-h-40 overflow-y-auto no-scrollbar">
@@ -495,12 +615,146 @@
                                             )) : <div className="text-center py-4 text-slate-300 text-[10px]">尚無範本。</div>}
                                         </div>
                                     </div>
+
+                                    <div className="bg-slate-50 p-3 rounded-xl space-y-3">
+                                        {currentViewConfig.backgroundImage && (
+                                            <div className="w-32 aspect-[3/5] mx-auto bg-slate-200 rounded-xl border border-slate-300 relative overflow-hidden flex items-center justify-center shadow-inner">
+                                                <div 
+                                                    className="absolute inset-0 w-full h-full pointer-events-none transition-all duration-75"
+                                                    style={{
+                                                        backgroundImage: `url(${currentViewConfig.backgroundImage})`,
+                                                        backgroundSize: `${currentViewConfig.bgSize || 100}% auto`,
+                                                        backgroundPosition: `center ${currentViewConfig.bgPosY || 50}%`,
+                                                        backgroundRepeat: 'no-repeat',
+                                                        opacity: currentViewConfig.bgOpacity || 1
+                                                    }}
+                                                />
+                                                <div className="absolute top-1 right-1 bg-black/40 backdrop-blur-sm text-white text-[9px] px-1.5 py-0.5 rounded-lg font-bold flex items-center gap-1 shadow-sm">
+                                                    <PreviewIcon size={8}/> 預覽
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        <div>
+                                            <div className="flex justify-between items-center mb-1">
+                                                <label className="text-xs font-bold text-slate-500 flex items-center gap-1"><Maximize size={12}/> 背景縮放 (寬度 %)</label>
+                                                <span className="text-xs font-bold text-sky-600">{currentViewConfig.bgSize || 100}%</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <button onClick={() => handleStep('bgSize', -1, 50, 300, true, 5)} className="w-8 h-8 flex items-center justify-center bg-white border border-slate-200 rounded-lg text-slate-400 hover:text-sky-500 hover:border-sky-200 transition-all"><Minus size={14}/></button>
+                                                <input 
+                                                    type="range" min="50" max="300" step="5"
+                                                    value={currentViewConfig.bgSize || 100}
+                                                    onChange={(e) => handleViewConfigChange('bgSize', parseInt(e.target.value))}
+                                                    className="flex-1 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-sky-500"
+                                                />
+                                                <button onClick={() => handleStep('bgSize', 1, 50, 300, true, 5)} className="w-8 h-8 flex items-center justify-center bg-white border border-slate-200 rounded-lg text-slate-400 hover:text-sky-500 hover:border-sky-200 transition-all"><Plus size={14}/></button>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <div className="flex justify-between items-center mb-1">
+                                                <label className="text-xs font-bold text-slate-500 flex items-center gap-1"><Move size={12}/> 背景垂直位置</label>
+                                                <span className="text-xs font-bold text-sky-600">{currentViewConfig.bgPosY || 50}%</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <button onClick={() => handleStep('bgPosY', -1, 0, 100, true, 1)} className="w-8 h-8 flex items-center justify-center bg-white border border-slate-200 rounded-lg text-slate-400 hover:text-sky-500 hover:border-sky-200 transition-all"><Minus size={14}/></button>
+                                                <input 
+                                                    type="range" min="0" max="100" step="1"
+                                                    value={currentViewConfig.bgPosY || 50}
+                                                    onChange={(e) => handleViewConfigChange('bgPosY', parseInt(e.target.value))}
+                                                    className="flex-1 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-sky-500"
+                                                />
+                                                <button onClick={() => handleStep('bgPosY', 1, 0, 100, true, 1)} className="w-8 h-8 flex items-center justify-center bg-white border border-slate-200 rounded-lg text-slate-400 hover:text-sky-500 hover:border-sky-200 transition-all"><Plus size={14}/></button>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <div className="flex justify-between items-center mb-2">
+                                                <label className="text-xs font-bold text-slate-500 flex items-center gap-1"><Droplets size={12}/> 背景透明度</label>
+                                                <span className="text-xs font-bold text-sky-600">{Math.round((currentViewConfig.bgOpacity || 1) * 100)}%</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <button onClick={() => handleStep('bgOpacity', -1, 0, 1, true, 0.05)} className="w-8 h-8 flex items-center justify-center bg-white border border-slate-200 rounded-lg text-slate-400 hover:text-sky-500 hover:border-sky-200 transition-all"><Minus size={14}/></button>
+                                                <input 
+                                                    type="range" min="0" max="100" step="5" 
+                                                    value={Math.round((currentViewConfig.bgOpacity || 1) * 100)} 
+                                                    onChange={(e) => handleViewConfigChange('bgOpacity', (parseInt(e.target.value) / 100))}
+                                                    className="flex-1 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-sky-500"
+                                                />
+                                                <button onClick={() => handleStep('bgOpacity', 1, 0, 1, true, 0.05)} className="w-8 h-8 flex items-center justify-center bg-white border border-slate-200 rounded-lg text-slate-400 hover:text-sky-500 hover:border-sky-200 transition-all"><Plus size={14}/></button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-slate-50 p-3 rounded-xl space-y-3">
+                                        <div className="flex justify-between items-center">
+                                            <label className="text-xs font-bold text-slate-500 flex items-center gap-1"><Palette size={12}/> 卡片底色</label>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-[10px] font-mono text-slate-400">{currentViewConfig.cardBgColor}</span>
+                                                <input 
+                                                    type="color" 
+                                                    value={currentViewConfig.cardBgColor}
+                                                    onChange={e => handleViewConfigChange('cardBgColor', e.target.value)}
+                                                    className="w-6 h-6 rounded overflow-hidden border-none outline-none cursor-pointer"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="flex justify-between items-center">
+                                            <label className="text-xs font-bold text-slate-500 flex items-center gap-1"><PaintBucket size={12}/> 卡片邊框</label>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-[10px] font-mono text-slate-400">{currentViewConfig.cardBorderColor || '#e2e8f0'}</span>
+                                                <input 
+                                                    type="color" 
+                                                    value={currentViewConfig.cardBorderColor || '#e2e8f0'}
+                                                    onChange={e => handleViewConfigChange('cardBorderColor', e.target.value)}
+                                                    className="w-6 h-6 rounded overflow-hidden border-none outline-none cursor-pointer"
+                                                />
+                                            </div>
+                                        </div>
+                                        
+                                        <div>
+                                            <div className="flex justify-between items-center mb-2">
+                                                <label className="text-xs font-bold text-slate-500 flex items-center gap-1"><Droplets size={12}/> 卡片透明度</label>
+                                                <span className="text-xs font-bold text-sky-600">{Math.round((1 - currentViewConfig.cardOpacity) * 100)}%</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <button onClick={() => handleStep('cardOpacity', 1, 0, 1, true, 0.05)} className="w-8 h-8 flex items-center justify-center bg-white border border-slate-200 rounded-lg text-slate-400 hover:text-sky-500 hover:border-sky-200 transition-all"><Minus size={14}/></button>
+                                                <input 
+                                                    type="range" 
+                                                    min="0" 
+                                                    max="100" 
+                                                    step="5" 
+                                                    value={Math.round((1 - currentViewConfig.cardOpacity) * 100)} 
+                                                    onChange={(e) => handleViewConfigChange('cardOpacity', 1 - (parseInt(e.target.value) / 100))}
+                                                    className="flex-1 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-sky-500"
+                                                />
+                                                <button onClick={() => handleStep('cardOpacity', -1, 0, 1, true, 0.05)} className="w-8 h-8 flex items-center justify-center bg-white border border-slate-200 rounded-lg text-slate-400 hover:text-sky-500 hover:border-sky-200 transition-all"><Plus size={14}/></button>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
+                            
+                            <div className="border-t border-slate-100 pt-4">
+                                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 block">Telegram Bot Token</label>
+                                <input type="text" value={localSettings.tgToken} onChange={e => handleGlobalChange('tgToken', e.target.value)} placeholder="123456:ABC-DEF..." className="w-full p-3 bg-slate-50 rounded-xl text-sm font-mono text-slate-600 outline-none focus:ring-2 focus:ring-sky-400"/>
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 block">Telegram Chat ID</label>
+                                <input type="text" value={localSettings.tgChatId} onChange={e => handleGlobalChange('tgChatId', e.target.value)} placeholder="-123456789" className="w-full p-3 bg-slate-50 rounded-xl text-sm font-mono text-slate-600 outline-none focus:ring-2 focus:ring-sky-400"/>
+                            </div>
+                            
+                            <button onClick={handleTest} disabled={!localSettings.tgToken || !localSettings.tgChatId || testStatus === 'sending'} 
+                                className={`w-full py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${testStatus === 'success' ? 'bg-emerald-100 text-emerald-600' : testStatus === 'error' ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
+                                {testStatus === 'sending' ? <Loader2 size={14} className="animate-spin"/> : testStatus === 'success' ? <Check size={14}/> : <SendHorizontal size={14}/>}
+                                {testStatus === 'sending' ? '傳送中...' : testStatus === 'success' ? '測試成功' : testStatus === 'error' ? '測試失敗' : '測試傳送'}
+                            </button>
                         </div>
                         <div className="flex justify-end gap-3 mt-6">
-                            <button onClick={onClose} className="px-5 py-2.5 text-slate-500 font-bold">取消</button>
-                            <button onClick={handleSave} className="px-6 py-2.5 bg-sky-500 text-white rounded-xl font-bold shadow-lg shadow-sky-200">儲存設定</button>
+                            <button onClick={onClose} className="px-5 py-2.5 text-slate-500 font-bold hover:bg-slate-50 rounded-xl transition-colors">取消</button>
+                            <button onClick={handleSave} className="px-6 py-2.5 bg-sky-500 hover:bg-sky-600 text-white rounded-xl font-bold shadow-lg shadow-sky-200 transition-all active:scale-95">儲存設定</button>
                         </div>
                     </div>
                 </div>
@@ -513,9 +767,15 @@
                 <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-fade-in" onClick={onClose}>
                     <div className="bg-white w-full max-w-xs rounded-3xl p-6 shadow-2xl space-y-4" onClick={e => e.stopPropagation()}>
                         <h2 className="text-lg font-black text-slate-800 text-center mb-2">資料管理</h2>
-                        <button onClick={onBackup} className="w-full py-4 bg-sky-50 text-sky-600 rounded-2xl font-bold flex flex-col items-center gap-1 hover:bg-sky-100 transition-colors"><DatabaseBackup size={24} /> 匯出備份</button>
-                        <button onClick={onImportClick} className="w-full py-4 bg-emerald-50 text-emerald-600 rounded-2xl font-bold flex flex-col items-center gap-1 hover:bg-emerald-100 transition-colors"><ArchiveRestore size={24} /> 匯入還原</button>
-                        <button onClick={onReset} className="w-full py-4 bg-slate-50 text-slate-500 rounded-2xl font-bold flex flex-col items-center gap-1 hover:bg-red-50 hover:text-red-500 transition-colors"><Eraser size={24} /> 清空/重置</button>
+                        <button onClick={onBackup} className="w-full py-4 bg-sky-50 text-sky-600 rounded-2xl font-bold flex flex-col items-center gap-1 hover:bg-sky-100 transition-colors">
+                            <DatabaseBackup size={24} /> 匯出備份 (JSON)
+                        </button>
+                        <button onClick={onImportClick} className="w-full py-4 bg-emerald-50 text-emerald-600 rounded-2xl font-bold flex flex-col items-center gap-1 hover:bg-emerald-100 transition-colors">
+                            <ArchiveRestore size={24} /> 匯入還原
+                        </button>
+                        <button onClick={onReset} className="w-full py-4 bg-slate-50 text-slate-500 rounded-2xl font-bold flex flex-col items-center gap-1 hover:bg-red-50 hover:text-red-500 transition-colors">
+                            <Eraser size={24} /> 清空/重置
+                        </button>
                         <button onClick={onClose} className="w-full py-3 text-slate-400 font-bold text-sm mt-2">取消</button>
                     </div>
                 </div>
@@ -528,24 +788,36 @@
             const [restoreSettings, setRestoreSettings] = useState(false);
             const count = Array.isArray(data) ? data.length : (data.tasks || []).length;
             const hasSettings = !!data.settings;
+
             return (
                 <div className="fixed inset-0 bg-slate-900/60 z-[60] flex items-center justify-center p-6 backdrop-blur-md animate-fade-in" onClick={onCancel}>
                     <div className="bg-white w-full max-sm rounded-[32px] p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
-                        <div className="text-center mb-6"><h2 className="text-xl font-black text-slate-800">準備匯入資料</h2><p className="text-sm text-slate-400 font-bold mt-1">偵測到 {count} 筆票券資料</p></div>
+                        <div className="text-center mb-6">
+                            <div className="w-16 h-16 bg-sky-50 text-sky-500 rounded-full flex items-center justify-center mx-auto mb-3">
+                                <FileJson size={32}/>
+                            </div>
+                            <h2 className="text-xl font-black text-slate-800">準備匯入資料</h2>
+                            <p className="text-sm text-slate-400 font-bold mt-1">偵測到 {count} 筆票券資料</p>
+                        </div>
                         <div className="space-y-4">
                             <div className="flex bg-slate-100 p-1 rounded-2xl">
-                                <button onClick={() => setMode('append')} className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all ${mode === 'append' ? 'bg-white shadow text-sky-600' : 'text-slate-400'}`}>添加</button>
-                                <button onClick={() => setMode('overwrite')} className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all ${mode === 'overwrite' ? 'bg-white shadow text-red-500' : 'text-slate-400'}`}>覆蓋</button>
+                                <button onClick={() => setMode('append')} className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all ${mode === 'append' ? 'bg-white shadow text-sky-600' : 'text-slate-400 hover:text-slate-600'}`}>添加</button>
+                                <button onClick={() => setMode('overwrite')} className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all ${mode === 'overwrite' ? 'bg-white shadow text-red-500' : 'text-slate-400 hover:text-slate-600'}`}>覆蓋</button>
                             </div>
                             {hasSettings && (
                                 <label className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl cursor-pointer">
-                                    <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${restoreSettings ? 'bg-sky-500 border-sky-500' : 'border-slate-300 bg-white'}`}>{restoreSettings && <Check size={14} className="text-white"/>}</div>
+                                    <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${restoreSettings ? 'bg-sky-500 border-sky-500' : 'border-slate-300 bg-white'}`}>
+                                        {restoreSettings && <Check size={14} className="text-white"/>}
+                                    </div>
                                     <input type="checkbox" className="hidden" checked={restoreSettings} onChange={e => setRestoreSettings(e.target.checked)}/>
                                     <div className="text-sm font-bold text-slate-700">還原設定 (標題、背景等)</div>
                                 </label>
                             )}
                         </div>
-                        <div className="flex gap-3 mt-8"><button onClick={onCancel} className="flex-1 py-3.5 bg-slate-100 text-slate-500 rounded-2xl font-bold">取消</button><button onClick={() => onConfirm(mode, restoreSettings)} className="flex-1 py-3.5 bg-sky-500 text-white rounded-2xl font-bold shadow-lg shadow-sky-200">確認匯入</button></div>
+                        <div className="flex gap-3 mt-8">
+                            <button onClick={onCancel} className="flex-1 py-3.5 bg-slate-100 text-slate-500 rounded-2xl font-bold">取消</button>
+                            <button onClick={() => onConfirm(mode, restoreSettings)} className="flex-1 py-3.5 bg-sky-500 text-white rounded-2xl font-bold shadow-lg shadow-sky-200 active:scale-95">確認匯入</button>
+                        </div>
                     </div>
                 </div>
             );
@@ -558,46 +830,117 @@
             isCompact, setIsCompact, view, setView, activeTag, setActiveTag, allTags,
             onQuickBgChange, headerBackgroundImage 
         }) => (
-            <div className="px-4 pt-8 pb-3 shadow-sm sticky top-0 z-40 rounded-b-[24px] bg-white text-slate-800" style={{ backgroundImage: headerBackgroundImage ? `url(${headerBackgroundImage})` : 'none', backgroundColor: headerBackgroundImage ? 'transparent' : 'white', backgroundSize: 'cover', backgroundPosition: 'center' }}>
+            <div 
+                className="px-4 pt-8 pb-3 shadow-sm sticky top-0 z-40 transition-all rounded-b-[24px] bg-white text-slate-800"
+                style={{
+                    backgroundImage: headerBackgroundImage ? `url(${headerBackgroundImage})` : 'none',
+                    backgroundColor: headerBackgroundImage ? 'transparent' : 'white',
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                }}
+            >
                 <div className="flex justify-between items-center mb-4">
-                    <div className="flex items-center gap-2 group cursor-pointer" onClick={() => { const newTitle = prompt("修改標題名稱:", appTitle); if(newTitle) onTitleChange(newTitle); }}>
+                    <div className="flex items-center gap-2 group cursor-pointer" onClick={() => {
+                        const newTitle = prompt("修改標題名稱:", appTitle);
+                        if(newTitle) onTitleChange(newTitle);
+                    }}>
                         <h1 className={`text-2xl font-black tracking-tight ${headerBackgroundImage ? 'drop-shadow-md text-white' : 'drop-shadow-sm'}`}>{appTitle}</h1>
                         <Pencil size={14} className={`${headerBackgroundImage ? 'text-white/70' : 'text-slate-400'} group-hover:text-sky-500 transition-colors`}/>
                     </div>
                     <div className="flex gap-2">
-                        <button onClick={onQuickBgChange} className="w-9 h-9 rounded-full bg-slate-50/50 border border-slate-100/50 flex items-center justify-center text-slate-500 hover:text-sky-600 hover:bg-white transition-all shadow-sm"><Palette size={16}/></button>
-                        {isSelectionMode && <button onClick={onSelectAll} className="px-3 py-1.5 rounded-full text-xs font-bold transition-all bg-emerald-100 text-emerald-600 hover:bg-emerald-200 flex items-center gap-1"><CheckCheck size={14} /> 全選</button>}
-                        <button onClick={() => setIsSelectionMode(!isSelectionMode)} className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${isSelectionMode ? 'bg-sky-500 text-white shadow-md' : 'bg-slate-100/80 text-slate-600 hover:bg-slate-200'}`}>{isSelectionMode ? `已選 ${selectedCount}` : '選取'}</button>
-                        <button onClick={onOpenSettings} className="w-9 h-9 rounded-full bg-slate-50/50 border border-slate-100/50 flex items-center justify-center text-slate-500 hover:text-sky-600 hover:bg-white transition-all shadow-sm"><Settings2 size={16}/></button>
-                        <button onClick={onOpenMenu} className="w-9 h-9 rounded-full bg-slate-50/50 border border-slate-100/50 flex items-center justify-center text-slate-500 hover:text-sky-600 hover:bg-white transition-all shadow-sm"><MoreVertical size={16}/></button>
+                         <button 
+                            onClick={onQuickBgChange} 
+                            className="w-9 h-9 rounded-full bg-slate-50/50 border border-slate-100/50 flex items-center justify-center text-slate-500 hover:text-sky-600 hover:bg-white transition-all shadow-sm"
+                            title="切換背景"
+                        >
+                            <Palette size={16}/>
+                        </button>
+                        {isSelectionMode && (
+                            <button 
+                                onClick={onSelectAll} 
+                                className="px-3 py-1.5 rounded-full text-xs font-bold transition-all bg-emerald-100 text-emerald-600 hover:bg-emerald-200 flex items-center gap-1"
+                            >
+                                <CheckCheck size={14} /> 全選
+                            </button>
+                        )}
+                        <button 
+                            onClick={() => setIsSelectionMode(!isSelectionMode)} 
+                            className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${isSelectionMode ? 'bg-sky-500 text-white shadow-md' : 'bg-slate-100/80 text-slate-600 hover:bg-slate-200'}`}
+                        >
+                            {isSelectionMode ? `已選 ${selectedCount}` : '選取'}
+                        </button>
+                        <button onClick={onOpenSettings} className="w-9 h-9 rounded-full bg-slate-50/50 border border-slate-100/50 flex items-center justify-center text-slate-500 hover:text-sky-600 hover:bg-white transition-all shadow-sm">
+                            <Settings2 size={16}/>
+                        </button>
+                        <button onClick={onOpenMenu} className="w-9 h-9 rounded-full bg-slate-50/50 border border-slate-100/50 flex items-center justify-center text-slate-500 hover:text-sky-600 hover:bg-white transition-all shadow-sm">
+                            <MoreVertical size={16}/>
+                        </button>
                     </div>
                 </div>
+                
                 <div className="flex flex-col gap-2">
                     <div className="flex gap-2">
                         <div className="relative flex-1 group">
-                            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-sky-500" />
-                            <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="搜尋..." className="w-full pl-10 pr-3 py-2 text-sm bg-slate-50/80 backdrop-blur-sm border border-slate-100 focus:bg-white rounded-2xl outline-none font-medium text-slate-700 transition-all" />
+                            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-sky-500 transition-colors" />
+                            <input 
+                                value={searchQuery}
+                                onChange={e => setSearchQuery(e.target.value)}
+                                placeholder="搜尋..." 
+                                className="w-full pl-10 pr-3 py-2 text-sm bg-slate-50/80 backdrop-blur-sm border border-slate-100 focus:bg-white focus:border-sky-200 rounded-2xl outline-none font-medium text-slate-700 transition-all placeholder:text-slate-400" 
+                            />
                         </div>
                         <div className="relative">
-                            <select value={activeTag} onChange={(e) => setActiveTag(e.target.value)} className="appearance-none bg-slate-50/80 backdrop-blur-sm border border-slate-100 text-xs font-bold text-slate-600 rounded-2xl h-full pl-3 pr-8 outline-none focus:ring-2 focus:ring-sky-200">
+                            <select
+                                value={activeTag}
+                                onChange={(e) => setActiveTag(e.target.value)}
+                                className="appearance-none bg-slate-50/80 backdrop-blur-sm border border-slate-100 text-xs font-bold text-slate-600 rounded-2xl h-full pl-3 pr-8 outline-none focus:ring-2 focus:ring-sky-200 hover:bg-slate-100 transition-colors"
+                            >
                                 <option value="all">全標籤</option>
                                 <option value="special_expiring">[自動] 快到期</option>
+                                <option value="special_duplicate">[自動] 重複序號</option>
                                 {allTags.map(t => <option key={t} value={t}>{t}</option>)}
                             </select>
                             <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"/>
                         </div>
                     </div>
+
                     <div className="flex justify-between items-center gap-2">
                          <div className="flex bg-slate-100/80 backdrop-blur-sm p-1 rounded-2xl">
-                            {[{id: 'active', icon: ListTodo, label: '待用'}, {id: 'completed', icon: CheckCircle2, label: '已用'}, {id: 'deleted', icon: Trash, label: '回收'}].map(tab => (
-                                <button key={tab.id} onClick={() => setView(tab.id)} className={`px-3 py-1.5 rounded-xl flex items-center gap-1 text-[10px] font-bold transition-all ${view === tab.id ? 'bg-white shadow text-sky-600' : 'text-slate-400 hover:text-slate-600'}`}><tab.icon size={12}/> {tab.label}</button>
+                            {[
+                                {id: 'active', icon: ListTodo, label: '待用'},
+                                {id: 'completed', icon: CheckCircle2, label: '已用'},
+                                {id: 'deleted', icon: Trash, label: '回收'}
+                            ].map(tab => (
+                                <button 
+                                    key={tab.id}
+                                    onClick={() => setView(tab.id)}
+                                    className={`px-3 py-1.5 rounded-xl flex items-center gap-1 text-[10px] font-bold transition-all ${view === tab.id ? 'bg-white shadow text-sky-600' : 'text-slate-400 hover:text-slate-600'}`}
+                                >
+                                    <tab.icon size={12}/> {tab.label}
+                                </button>
                             ))}
                         </div>
+
                         <div className="flex gap-2">
-                             <button onClick={() => { const types = ['expiring', 'newest', 'oldest']; const nextIdx = (types.indexOf(sortType) + 1) % types.length; setSortType(types[nextIdx]); }} className="px-2 h-9 bg-slate-50/80 backdrop-blur-sm border border-slate-100 rounded-2xl flex items-center justify-center text-slate-600 transition-all gap-1">
-                                <ArrowUpDown size={14} className="text-sky-500"/><span className="text-[10px] font-bold">{sortType === 'expiring' ? '快到期' : sortType === 'newest' ? '最新' : '最舊'}</span>
+                             <button 
+                                onClick={() => {
+                                    const types = ['expiring', 'newest', 'oldest'];
+                                    const nextIdx = (types.indexOf(sortType) + 1) % types.length;
+                                    setSortType(types[nextIdx]);
+                                }}
+                                className="px-2 h-9 bg-slate-50/80 backdrop-blur-sm hover:bg-slate-100 border border-slate-100 rounded-2xl flex items-center justify-center text-slate-600 transition-all gap-1"
+                                title="切換排序"
+                            >
+                                <ArrowUpDown size={14} className="text-sky-500"/>
+                                <span className="text-[10px] font-bold">
+                                    {sortType === 'expiring' ? '快到期' : sortType === 'newest' ? '最新' : '最舊'}
+                                </span>
                             </button>
-                            <button onClick={() => setIsCompact(!isCompact)} className={`w-9 h-9 flex items-center justify-center rounded-full transition-all border ${isCompact ? 'bg-sky-500 text-white border-sky-500' : 'bg-slate-50/80 backdrop-blur-sm text-slate-500 border-slate-100'}`}>
+                            <button 
+                                onClick={() => setIsCompact(!isCompact)}
+                                className={`w-9 h-9 flex items-center justify-center rounded-full transition-all border ${isCompact ? 'bg-sky-500 text-white border-sky-500' : 'bg-slate-50/80 backdrop-blur-sm text-slate-500 hover:bg-slate-100 border-slate-100'}`}
+                                title={isCompact ? "切換至展開模式" : "切換至列表模式"}
+                            >
                                 {isCompact ? <Rows size={16}/> : <LayoutGrid size={16}/>}
                             </button>
                         </div>
@@ -607,69 +950,110 @@
         );
 
         const TicketCard = ({ ticket, onClick, notifyDays, isSelectionMode, isSelected, onSelect, isDuplicate, opacity = 0.95, cardBgColor = '#ffffff', cardBorderColor = '#e2e8f0', isCompact, compactHeight = 70, compactShowImage = false }) => {
-            const isExpiringWarning = !ticket.completed && !ticket.isDeleted && ticket.expiry && checkIsExpiringSoon(ticket.expiry, notifyDays);
+            const isExpiring = !ticket.completed && ticket.expiry && checkIsExpiringSoon(ticket.expiry, notifyDays);
             const isDuplicateWarning = isDuplicate && !ticket.completed && !ticket.isDeleted;
+            const isExpiringWarning = isExpiring && !ticket.completed && !ticket.isDeleted;
             const { r, g, b } = hexToRgb(cardBgColor);
             let bgBase = `rgba(${r}, ${g}, ${b}, ${opacity})`;
-            let overlayClass = isSelected ? 'bg-sky-500/10 ring-2 ring-sky-500 border-sky-500' : (isExpiringWarning ? 'bg-red-500/10 border-red-400 shadow-red-100' : 'hover:shadow-md border');
-            let dynamicBorderStyle = isSelected || isExpiringWarning ? {} : { borderColor: cardBorderColor };
+            let overlayClass = '';
+            let dynamicBorderStyle = {};
+
+            if (isSelected) {
+                overlayClass = 'bg-sky-500/10 ring-2 ring-sky-500 border-sky-500';
+            } else if (isExpiringWarning) {
+                overlayClass = 'bg-red-500/10 border-red-400 shadow-red-100';
+            } else {
+                overlayClass = 'hover:shadow-md border';
+                dynamicBorderStyle = { borderColor: cardBorderColor };
+            }
             const duplicateClass = isDuplicateWarning ? 'border-red-500 ring-2 ring-red-100 shadow-red-200' : '';
 
             if (isCompact) {
                 return (
-                    <div onClick={() => { if(isSelectionMode) onSelect(ticket.id); else onClick(ticket); }} style={{ backgroundColor: bgBase, height: `${compactHeight}px`, ...dynamicBorderStyle }} className={`backdrop-blur-sm mx-2 mb-1 px-2 rounded-lg shadow-sm flex items-center gap-2 transition-all cursor-pointer overflow-hidden group ${overlayClass} ${duplicateClass}`}>
-                        {isSelectionMode && <div className={`w-4 h-4 flex-shrink-0 rounded-full border-2 flex items-center justify-center ${isSelected ? 'bg-sky-500 border-sky-500' : 'border-slate-300 bg-white'}`}>{isSelected && <Check size={10} className="text-white"/>}</div>}
-                        {compactShowImage && <div className="h-full aspect-square py-1 mr-1 flex-shrink-0">{ticket.image ? <img src={ticket.image} className={`w-full h-full object-cover rounded-md ${ticket.completed ? 'grayscale opacity-50' : ''}`} /> : <div className="w-full h-full bg-slate-100 rounded-md flex items-center justify-center"><i className="fas fa-ticket-alt text-slate-300 text-xs"></i></div>}</div>}
+                    <div onClick={() => { if(isSelectionMode) onSelect(ticket.id); else onClick(ticket); }} style={{ backgroundColor: bgBase, height: `${compactHeight}px`, ...(!isSelected && !isExpiringWarning && !isDuplicateWarning ? dynamicBorderStyle : {}) }} className={`backdrop-blur-sm mx-2 mb-1 px-2 rounded-lg shadow-sm flex items-center gap-2 active:scale-[0.98] transition-all cursor-pointer relative overflow-hidden group ${overlayClass} ${duplicateClass}`}>
+                        {isSelectionMode && (
+                            <div className={`w-4 h-4 flex-shrink-0 rounded-full border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-sky-500 border-sky-500' : 'border-slate-300 bg-white'}`}>
+                                {isSelected && <Check size={10} className="text-white"/>}
+                            </div>
+                        )}
+                        {compactShowImage && (
+                            <div className="h-full aspect-square py-1 mr-1 flex-shrink-0">
+                                {ticket.image ? <img src={ticket.image} className={`w-full h-full object-cover rounded-md ${ticket.completed ? 'grayscale opacity-50' : ''}`} /> : <div className="w-full h-full bg-slate-100 rounded-md flex items-center justify-center border border-slate-200"><i className="fas fa-ticket-alt text-slate-300 text-xs"></i></div>}
+                            </div>
+                        )}
                         <div className="flex-1 min-w-0 flex flex-col justify-center">
-                            <h3 className={`font-bold text-slate-800 line-clamp-1 text-sm ${ticket.completed ? 'line-through text-slate-400' : ''}`}>{ticket.productName}</h3>
-                            <div className="flex items-center gap-2 mt-0.5"><span className={`text-[10px] font-bold ${ticket.completed ? 'text-emerald-600' : 'text-emerald-500'}`}>{ticket.completed ? `已用 ${formatTime(ticket.completedAt)}` : (ticket.expiry || '無期限')}</span></div>
+                            <div className="flex items-center gap-2">
+                                {isDuplicateWarning && <span className="text-[9px] bg-red-500 text-white px-1.5 py-0.5 rounded font-bold">重複</span>}
+                                <h3 className={`font-bold text-slate-800 line-clamp-1 text-sm ${ticket.completed ? 'line-through text-slate-400' : ''}`}>{ticket.productName}</h3>
+                            </div>
+                            <div className="flex items-center gap-2 mt-0.5">
+                                {isExpiringWarning && <span className="text-[9px] font-bold text-red-500 flex items-center gap-0.5"><AlertCircle size={9}/> 快到期</span>}
+                                <span className={`text-[10px] font-bold ${ticket.completed ? 'text-emerald-600' : 'text-emerald-500'}`}>{ticket.completed ? `已用 ${formatTime(ticket.completedAt)}` : (ticket.expiry || '無期限')}</span>
+                            </div>
                         </div>
-                        {!isSelectionMode && <button className={`flex-shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-lg ${ticket.completed ? 'bg-slate-100 text-slate-500' : 'bg-emerald-100 text-emerald-600 hover:bg-emerald-500 hover:text-white'}`}>{ticket.completed ? '查看' : '兌換'}</button>}
+                        {!isSelectionMode && <button className={`flex-shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-lg transition-all ${ticket.completed ? 'bg-slate-100 text-slate-500' : 'bg-emerald-100 text-emerald-600 hover:bg-emerald-500 hover:text-white'}`}>{ticket.completed ? '查看' : '兌換'}</button>}
                     </div>
                 );
             }
 
             return (
-                <div onClick={() => { if(isSelectionMode) onSelect(ticket.id); else onClick(ticket); }} style={{ backgroundColor: bgBase, ...dynamicBorderStyle }} className={`backdrop-blur-sm mx-4 mt-4 p-4 rounded-3xl shadow-sm flex gap-4 transition-all cursor-pointer relative overflow-hidden group ${overlayClass} ${duplicateClass}`}>
-                    {isSelectionMode && <div className={`absolute top-3 right-3 z-20 w-6 h-6 rounded-full border-2 flex items-center justify-center ${isSelected ? 'bg-sky-500 border-sky-500' : 'border-slate-300 bg-white'}`}>{isSelected && <Check size={14} className="text-white"/>}</div>}
-                    <div className="w-20 h-20 flex-shrink-0 rounded-2xl overflow-hidden relative group-hover:scale-105 transition-transform">
-                        {ticket.image ? <img src={ticket.image} className={`w-full h-full object-cover ${ticket.completed ? 'grayscale opacity-50' : ''}`} /> : <div className="w-full h-full bg-slate-50 flex items-center justify-center"><i className="fas fa-ticket-alt text-slate-300 text-2xl"></i></div>}
+                <div onClick={() => { if(isSelectionMode) onSelect(ticket.id); else onClick(ticket); }} style={{ backgroundColor: bgBase, ...(!isSelected && !isExpiringWarning && !isDuplicateWarning ? dynamicBorderStyle : {}) }} className={`backdrop-blur-sm mx-4 mt-4 p-4 rounded-3xl shadow-sm flex gap-4 active:scale-[0.98] transition-all cursor-pointer relative overflow-hidden group ${overlayClass} ${duplicateClass}`}>
+                    {isSelectionMode && <div className={`absolute top-3 right-3 z-20 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-sky-500 border-sky-500' : 'border-slate-300 bg-white'}`}>{isSelected && <Check size={14} className="text-white"/>}</div>}
+                    {isDuplicateWarning && <div className="absolute top-0 left-0 bg-red-500 text-white text-[9px] px-2 py-0.5 rounded-br-lg z-20 font-bold">重複序號</div>}
+                    <div className="w-20 h-20 flex-shrink-0 rounded-2xl flex items-center justify-center overflow-hidden relative group-hover:scale-105 transition-transform">
+                        {ticket.image ? <img src={ticket.image} className={`w-full h-full object-cover ${ticket.completed ? 'grayscale opacity-50' : ''}`} /> : <i className="fas fa-ticket-alt text-slate-300 text-2xl"></i>}
+                        {ticket.images && ticket.images.length > 1 && <div className="absolute bottom-0 right-0 bg-black/60 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-tl-lg">+{ticket.images.length-1}</div>}
                     </div>
                     <div className="flex-1 flex flex-col justify-between py-1 min-w-0">
                         <div>
-                            <h3 className={`font-bold text-slate-800 line-clamp-1 text-[15px] ${ticket.completed ? 'line-through text-slate-400' : ''}`}>{ticket.productName}</h3>
+                            <div className="flex justify-between items-start pr-6">
+                                <h3 className={`font-bold text-slate-800 line-clamp-1 text-[15px] ${ticket.completed ? 'line-through text-slate-400' : ''}`}>{ticket.productName}</h3>
+                                {ticket.completed && <span className="bg-slate-100 text-slate-500 text-[10px] px-2 py-0.5 rounded-full font-bold">已使用</span>}
+                            </div>
                             {isExpiringWarning && <div className="text-[10px] font-bold text-red-500 mt-1 flex items-center gap-1 animate-pulse"><AlertCircle size={10}/> 快到期</div>}
-                            <div className="flex gap-1.5 mt-2 overflow-x-auto no-scrollbar">{ticket.tags && ticket.tags.map(t => <span key={t} className="text-[10px] bg-sky-50 text-sky-600 px-2 py-0.5 rounded-md font-bold whitespace-nowrap">{t}</span>)}</div>
+                            <div className="flex gap-1.5 mt-2 overflow-x-auto no-scrollbar">
+                                {ticket.tags && ticket.tags.map(t => <span key={t} className="text-[10px] bg-sky-50 text-sky-600 px-2 py-0.5 rounded-md font-bold whitespace-nowrap">{t}</span>)}
+                                {!ticket.tags?.length && <span className="text-[10px] text-slate-300 font-bold">#</span>}
+                            </div>
                         </div>
                         <div className="flex justify-between items-end mt-2">
-                            {ticket.completed ? <div className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-lg flex items-center gap-1"><CheckCircle2 size={10}/> <span>核銷於 {formatDateTime(ticket.completedAt)}</span></div> : <div className={`text-xs font-bold flex items-center gap-1.5 ${isExpiringWarning ? 'text-red-500' : 'text-emerald-500'}`}><Clock size={12}/> <span>{ticket.expiry || '無期限'}</span></div>}
+                            {ticket.completed && ticket.completedAt ? <div className="text-[10px] font-bold text-emerald-600 flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded-lg"><CheckCircle2 size={10}/> <span>核銷於 {formatDateTime(ticket.completedAt)}</span></div> : <div className={`text-xs font-bold flex items-center gap-1.5 ${isExpiring ? 'text-red-500' : 'text-emerald-500'}`}><Clock size={12}/> <span>{ticket.expiry || '無期限'}</span></div>}
                             {!isSelectionMode && <button className={`text-sm font-bold px-5 py-2.5 rounded-2xl shadow-sm transition-all active:scale-95 ${ticket.completed ? 'bg-slate-100 text-slate-500' : 'bg-emerald-100 text-emerald-600 hover:bg-emerald-500 hover:text-white shadow-emerald-100'}`}>{ticket.completed ? '查看' : '兌換'}</button>}
                         </div>
                     </div>
+                    <div className="ticket-rip-l" style={{backgroundColor: 'transparent', boxShadow: 'none', borderLeft: '6px solid transparent'}}></div> 
                 </div>
             );
         };
 
         const MomoTemplate = ({ ticket, onImageClick }) => {
             return (
-                <div className="w-full h-full flex flex-col bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-2xl text-left">
-                    <div className="bg-momo px-4 py-2.5 flex justify-between items-center text-white shrink-0"><div className="flex items-center gap-2"><img alt="momo" src="https://www.momoshop.com.tw/writeOff/resources/images/momologo.png" className="h-4 w-auto brightness-0 invert"/><span className="text-[11px] font-black opacity-90">電子票券明細</span></div><Info size={14} className="opacity-60" /></div>
+                <div className="w-full h-full flex flex-col bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-2xl animate-fade-in text-left">
+                    <div className="bg-momo px-4 py-2.5 flex justify-between items-center text-white shrink-0">
+                        <div className="flex items-center gap-2"><img alt="momo" src="https://www.momoshop.com.tw/writeOff/resources/images/momologo.png" className="h-4 w-auto brightness-0 invert"/><span className="text-[11px] font-black tracking-widest opacity-90">電子票券明細</span></div>
+                        <Info size={14} className="opacity-60" />
+                    </div>
                     <div className="flex-1 overflow-y-auto no-scrollbar">
                         <div className="p-3 space-y-3">
                             <div className="flex gap-3">
-                                {/* [CR-FUNC] 點開原圖功能現在明確讀取原圖欄位 */}
+                                {/* [CR-FUNC] 優先顯示 originalImage 作為核銷頁主圖 */}
                                 <div onClick={onImageClick} className="w-20 h-20 shrink-0 border border-slate-100 rounded-lg overflow-hidden bg-slate-50 flex items-center justify-center cursor-zoom-in">{(ticket.originalImage || ticket.image) ? <img src={ticket.originalImage || ticket.image} className="w-full h-full object-cover" /> : <ImageIcon className="text-slate-200" size={24} />}</div>
-                                <div className="flex-1 min-w-0 flex flex-col justify-center"><h2 className="text-[15px] font-black text-slate-800 leading-tight line-clamp-2">{ticket.productName}</h2></div>
+                                <div className="flex-1 min-w-0 flex flex-col justify-center"><h2 className="text-[15px] font-black text-slate-800 leading-tight line-clamp-2">{ticket.productName}</h2>
+                                </div>
                             </div>
                             <div className="relative border-t border-dashed border-slate-200 my-1"><div className="absolute -left-5 -top-1.5 w-3 h-3 bg-white rounded-full border border-slate-100"></div><div className="absolute -right-5 -top-1.5 w-3 h-3 bg-white rounded-full border border-slate-100"></div></div>
                             <div className="bg-slate-50/50 rounded-xl p-3 flex flex-col items-center gap-3">
                                 <div className="w-full px-2"><BarcodeCanvas text={ticket.serial} /></div>
                                 <div className="p-1.5 bg-white border border-slate-100 rounded-lg shadow-sm"><QRCodeCanvas text={ticket.serial} size={110} /></div>
-                                <div className="text-center font-mono font-black text-slate-700 tracking-wider break-all px-4 text-xs">{ticket.serial}</div>
+                                <div className="text-center"><p className="text-[10px] font-bold text-slate-400 mb-0.5">電子券號</p><p className="text-[13px] font-mono font-black text-slate-700 tracking-wider break-all px-4">{ticket.serial}</p></div>
+                            </div>
+                            <div className="space-y-1.5 px-1">
+                                <div className="flex justify-between items-center text-xs"><span className="font-bold text-slate-400 flex items-center gap-1"><Clock size={12}/> 兌換期限</span><span className="font-black text-momo tracking-tight">{ticket.expiry || '無效期限制'}</span></div>
+                                <div className="pt-2 text-[10px] text-slate-400 leading-tight border-t border-slate-100 italic">● 本券限兌換一次，結帳前請出示此畫面。不接受手抄或口說序號。</div>
                             </div>
                         </div>
                     </div>
-                    <div className="px-4 py-2 bg-slate-50 border-t border-slate-100 flex justify-between items-center"><span className="text-[9px] font-bold text-slate-400">Copyright © momo.com Inc.</span></div>
+                    <div className="px-4 py-2 bg-slate-50 border-t border-slate-100 shrink-0 flex justify-between items-center"><span className="text-[9px] font-bold text-slate-400">Copyright © momo.com Inc.</span><div className="flex items-center gap-1 opacity-40"><img src="https://www.momoshop.com.tw/writeOff/resources/images/footerMOMO.png" className="h-4 w-auto" /></div></div>
                 </div>
             );
         };
@@ -680,13 +1064,16 @@
             const [editName, setEditName] = useState(ticket.productName);
             const [editExpiry, setEditExpiry] = useState(ticket.expiry);
             const [editTags, setEditTags] = useState(ticket.tags || []);
-            const [editThumb, setEditThumb] = useState(ticket.image || '');
-            const [editOriginal, setEditOriginal] = useState(ticket.originalImage || '');
+            const [editImage, setEditImage] = useState(ticket.image || '');
+            const [editOriginalImage, setEditOriginalImage] = useState(ticket.originalImage || '');
             
             useEffect(() => {
                 if (ticket) {
-                    setEditName(ticket.productName); setEditExpiry(ticket.expiry); setEditTags(ticket.tags || []);
-                    setEditThumb(ticket.image || ''); setEditOriginal(ticket.originalImage || '');
+                    setEditName(ticket.productName);
+                    setEditExpiry(ticket.expiry);
+                    setEditTags(ticket.tags || []);
+                    setEditImage(ticket.image || '');
+                    setEditOriginalImage(ticket.originalImage || '');
                 }
             }, [ticket]);
 
@@ -700,98 +1087,151 @@
             const [showFullScreen, setShowFullScreen] = useState(false);
 
             const handleSave = () => {
-                onUpdate({ ...ticket, productName: editName, expiry: editExpiry.replace(/-/g, '/'), tags: editTags, image: editThumb, originalImage: editOriginal });
+                onUpdate({
+                    ...ticket, productName: editName, expiry: editExpiry.replace(/-/g, '/'),
+                    tags: editTags, image: editImage, originalImage: editOriginalImage
+                });
                 setIsEditing(false);
             };
 
             const handleSaveAsTemplate = () => {
                 const templateName = prompt("請輸入範本名稱：", editName);
                 if (templateName) {
-                    onSaveTemplate({ templateName, productName: editName, image: editThumb, originalImage: editOriginal, tags: editTags });
+                    onSaveTemplate({
+                        templateName,
+                        productName: editName,
+                        image: editImage,
+                        originalImage: editOriginalImage,
+                        tags: editTags
+                    });
                     alert("已儲存為範本！");
                 }
             };
 
-            const handleImageUpload = async (e, type) => {
-                const file = e.target.files[0];
-                if(file) {
-                    try { 
-                        // [CR-FUNC] 不同圖片資源分開處理與上傳
-                        const base64 = (type === 'thumb') ? await compressImage(file, 0.5, 400) : await compressImage(file, 0.9, 1600);
-                        if(type === 'thumb') setEditThumb(base64); else setEditOriginal(base64);
-                    } catch(err) { alert("上傳失敗：" + err.message); }
-                }
-            };
+            const hasImage = !!(ticket.originalImage || ticket.image);
+            const isMomoMode = viewMode === 'momo';
 
             return (
                 <>
-                <div className="fixed inset-0 bg-slate-900/70 z-50 flex items-center justify-center p-3 animate-fade-in backdrop-blur-md" onClick={onClose}>
-                    <div className={`bg-white w-full max-sm rounded-[28px] overflow-hidden relative shadow-2xl flex flex-col border border-white/20 ${viewMode === 'momo' ? 'h-[85vh] sm:h-auto' : 'max-h-[90vh]'}`} onClick={e => e.stopPropagation()}>
+                <div className="fixed inset-0 bg-slate-900/70 z-50 flex items-center justify-center p-3 sm:p-4 animate-fade-in backdrop-blur-md" onClick={onClose}>
+                    <div className={`bg-white w-full max-sm rounded-[28px] overflow-hidden relative shadow-2xl flex flex-col border border-white/20 transition-all ${isMomoMode ? 'h-[85vh] sm:h-auto' : 'max-h-[90vh]'}`} onClick={e => e.stopPropagation()}>
                         <div className="p-4 sm:p-5 flex flex-col h-full">
-                            <div className="text-center">
-                                {isEditing ? <input className="text-lg font-black text-center w-full border-b border-sky-200 pb-2 mb-2 outline-none" value={editName} onChange={e=>setEditName(e.target.value)} /> : (viewMode !== 'momo' && <h3 className="text-base font-black text-slate-800 break-words mb-2">{ticket.productName}</h3>)}
+                            <div className="text-center shrink-0">
+                                {isEditing ? (
+                                    <input className="text-lg font-black text-center w-full border-b border-sky-200 pb-2 mb-2 text-slate-800 focus:outline-none" value={editName} onChange={e=>setEditName(e.target.value)} />
+                                ) : (
+                                    !isMomoMode && <h3 className="text-base font-black text-slate-800 break-words leading-tight px-4 mb-2">{ticket.productName}</h3>
+                                )}
                                 {isEditing && (
-                                    <div className="mt-2 text-left space-y-3 bg-slate-50 p-4 rounded-2xl overflow-y-auto no-scrollbar max-h-[50vh]">
-                                        <div className="grid grid-cols-2 gap-4">
+                                    <div className="mt-2 text-left space-y-3 bg-slate-50 p-4 rounded-2xl">
+                                        <div className="grid grid-cols-2 gap-3">
                                             <div>
-                                                <label className="text-[10px] font-bold text-slate-400 uppercase">1. 票券縮圖</label>
-                                                <div className="mt-1 flex flex-col items-center gap-2">
-                                                    <div className="w-16 h-16 bg-white border border-dashed rounded-lg flex items-center justify-center overflow-hidden">{editThumb ? <img src={editThumb} className="w-full h-full object-cover"/> : <ImageIcon size={16} className="text-slate-200"/>}</div>
-                                                    <label className="px-2 py-1 bg-sky-100 text-sky-600 text-[10px] font-bold rounded cursor-pointer">上傳縮圖<input type="file" accept="image/*" onChange={e => handleImageUpload(e, 'thumb')} className="hidden"/></label>
+                                                <label className="text-[10px] font-bold text-slate-400 uppercase">縮圖 (主畫面用)</label>
+                                                <div className="mt-1 flex flex-col gap-2">
+                                                    <div className="w-full aspect-square bg-white border border-dashed border-slate-300 rounded-lg flex items-center justify-center relative overflow-hidden">
+                                                        {editImage ? <img src={editImage} className="w-full h-full object-cover"/> : <ImageIcon size={20} className="text-slate-200"/>}
+                                                        <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={async e => {
+                                                            const file = e.target.files[0];
+                                                            if(file) { const base64 = await compressImage(file, 0.4, 400); setEditImage(base64); }
+                                                        }}/>
+                                                    </div>
+                                                    <span className="text-[9px] text-center text-slate-400">點擊上傳縮圖</span>
                                                 </div>
                                             </div>
                                             <div>
-                                                <label className="text-[10px] font-bold text-slate-400 uppercase">2. 核銷原圖</label>
-                                                <div className="mt-1 flex flex-col items-center gap-2">
-                                                    <div className="w-16 h-16 bg-white border border-dashed rounded-lg flex items-center justify-center overflow-hidden">{editOriginal ? <img src={editOriginal} className="w-full h-full object-cover"/> : <ImageIcon size={16} className="text-slate-200"/>}</div>
-                                                    <label className="px-2 py-1 bg-emerald-100 text-emerald-600 text-[10px] font-bold rounded cursor-pointer">上傳原圖<input type="file" accept="image/*" onChange={e => handleImageUpload(e, 'orig')} className="hidden"/></label>
+                                                <label className="text-[10px] font-bold text-slate-400 uppercase">原圖 (核銷用)</label>
+                                                <div className="mt-1 flex flex-col gap-2">
+                                                    <div className="w-full aspect-square bg-white border border-dashed border-slate-300 rounded-lg flex items-center justify-center relative overflow-hidden">
+                                                        {editOriginalImage ? <img src={editOriginalImage} className="w-full h-full object-cover"/> : <FileImage size={20} className="text-slate-200"/>}
+                                                        <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={async e => {
+                                                            const file = e.target.files[0];
+                                                            if(file) { const base64 = await compressImage(file, 0.9, 1600); setEditOriginalImage(base64); }
+                                                        }}/>
+                                                    </div>
+                                                    <span className="text-[9px] text-center text-slate-400">點擊上傳高品質圖</span>
                                                 </div>
                                             </div>
                                         </div>
-                                        <div><label className="text-[10px] font-bold text-slate-400 uppercase">兌換期限</label><input type="date" className="w-full p-2.5 bg-white border rounded-xl outline-none font-bold text-slate-600" value={editExpiry ? editExpiry.replace(/\//g, '-') : ''} onChange={e => setEditExpiry(e.target.value)}/></div>
+                                        <div>
+                                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">兌換期限</label>
+                                            <input 
+                                                type="date" 
+                                                className="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none text-sm font-bold text-slate-600" 
+                                                value={editExpiry ? editExpiry.replace(/\//g, '-') : ''} 
+                                                onChange={e => setEditExpiry(e.target.value)}
+                                            />
+                                        </div>
                                         <div><label className="text-[10px] font-bold text-slate-400 uppercase">標籤</label><TagSelectInput allTags={allTags} selectedTags={editTags} onTagsChange={setEditTags} extraSuggestions={specificViewKeywords} /></div>
                                     </div>
                                 )}
                             </div>
                             {!isEditing && (
                                 <div className="flex-1 flex flex-col min-h-0">
-                                    {viewMode !== 'momo' && (
-                                        <div className="flex justify-center"><div className="flex bg-slate-100 p-1 rounded-xl mb-3">
-                                            <button onClick={()=>setViewMode('standard')} className={`px-4 py-1.5 rounded-lg text-[10px] font-bold ${viewMode === 'standard' ? 'bg-white shadow-sm' : 'text-slate-400'}`}>條碼</button>
-                                            {(ticket.originalImage || ticket.image) && <button onClick={()=>setViewMode('image')} className={`px-4 py-1.5 rounded-lg text-[10px] font-bold ${viewMode === 'image' ? 'bg-white shadow-sm' : 'text-slate-400'}`}>原圖</button>}
-                                            {isSpecificView && <button onClick={()=>setViewMode('momo')} className={`px-4 py-1.5 rounded-lg text-[10px] font-bold ${viewMode === 'momo' ? 'bg-momo text-white' : 'text-momo'}`}>專屬</button>}
-                                        </div></div>
+                                    {!isMomoMode && (
+                                        <div className="flex justify-center shrink-0">
+                                            <div className="flex bg-slate-100 p-1 rounded-xl mb-3">
+                                                <button onClick={()=>setViewMode('standard')} className={`px-4 py-1.5 rounded-lg text-[10px] font-bold transition-all ${viewMode === 'standard' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-400'}`}>條碼</button>
+                                                {hasImage && <button onClick={()=>setViewMode('image')} className={`px-4 py-1.5 rounded-lg text-[10px] font-bold transition-all ${viewMode === 'image' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-400'}`}>原圖</button>}
+                                                {isSpecificView && <button onClick={()=>setViewMode('momo')} className={`px-4 py-1.5 rounded-lg text-[10px] font-bold transition-all ${viewMode === 'momo' ? 'bg-momo text-white shadow-sm' : 'text-momo'}`}>專屬</button>}
+                                            </div>
+                                        </div>
                                     )}
-                                    <div className="flex-1 overflow-y-auto no-scrollbar">
+                                    <div className="flex-1 min-h-0 relative overflow-y-auto no-scrollbar pb-4">
                                         {viewMode === 'image' ? (
-                                            <div className="h-full flex flex-col items-center justify-center cursor-zoom-in" onClick={() => setShowFullScreen(true)}><img src={ticket.originalImage || ticket.image} className="max-h-full rounded-xl shadow" /></div>
-                                        ) : viewMode === 'momo' ? (
+                                            <div className="h-full flex flex-col items-center gap-3 relative group">
+                                                <button onClick={onClose} className="absolute top-2 right-2 z-10 w-8 h-8 bg-black/50 backdrop-blur-md text-white rounded-full flex items-center justify-center shadow-lg transition-transform active:scale-90">
+                                                    <X size={18}/>
+                                                </button>
+                                                <div className="relative w-full flex-1 min-h-0 flex items-center justify-center cursor-zoom-in" onClick={() => setShowFullScreen(true)}>
+                                                    <img src={ticket.originalImage || ticket.image} className="max-h-full w-auto rounded-xl shadow-md border border-slate-100" />
+                                                </div>
+                                                {ticket.serial && (<div className="w-full space-y-2 shrink-0 pb-4"><div className="bg-white p-2 rounded-xl border border-slate-100"><BarcodeCanvas text={ticket.serial} /></div><div className="flex justify-center p-2 bg-white rounded-xl border border-slate-100 shrink-0"><QRCodeCanvas text={ticket.serial} size={100} /></div></div>)}
+                                            </div>
+                                        ) : isMomoMode ? (
                                             <div className="h-full py-1"><MomoTemplate ticket={ticket} onImageClick={() => setShowFullScreen(true)} /></div>
                                         ) : (
                                             <div className="h-full flex flex-col items-center justify-center gap-5 py-4">
-                                                {ticket.serial && <div className="w-full bg-white p-3 rounded-xl border"><BarcodeCanvas text={ticket.serial} /></div>}
-                                                <div className="p-4 bg-white rounded-[32px] border">{ticket.serial ? <QRCodeCanvas text={ticket.serial} size={180} /> : <div className="w-40 h-40 flex items-center justify-center text-slate-200 border-2 border-dashed rounded-2xl font-bold">無序號</div>}</div>
-                                                <div className="text-center font-mono text-lg font-black text-slate-600 bg-slate-50 px-4 py-1 rounded-full">{ticket.serial || 'N/A'}</div>
+                                                {ticket.serial && <div className="w-full bg-white p-3 rounded-xl border border-slate-100 shadow-sm"><BarcodeCanvas text={ticket.serial} /></div>}
+                                                <div className="p-4 bg-white rounded-[32px] shadow-sm border border-slate-100">{ticket.serial ? <QRCodeCanvas text={ticket.serial} size={180} /> : <div className="w-40 h-40 flex items-center justify-center text-slate-200 border-2 border-dashed rounded-2xl font-bold">無序號</div>}</div>
+                                                <div className="text-center"><span className="text-[11px] font-bold text-slate-400 block mb-1">電子券號</span><span className="font-mono text-lg font-black text-slate-600 bg-slate-50 px-4 py-1 rounded-full">{ticket.serial || 'N/A'}</span></div>
                                             </div>
                                         )}
                                     </div>
                                 </div>
                             )}
-                            <div className="mt-4 flex flex-col gap-2">
+                            <div className="mt-4 shrink-0 flex flex-col gap-2">
                                 {isEditing ? (
                                     <>
                                         <button onClick={handleSaveAsTemplate} className="w-full py-2 bg-sky-50 text-sky-600 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 border border-sky-100"><BookTemplate size={14}/> 儲存為範本</button>
-                                        <div className="flex gap-2"><button onClick={()=>setIsEditing(false)} className="flex-1 py-3 bg-slate-100 text-slate-500 rounded-xl font-bold text-sm">取消</button><button onClick={handleSave} className="flex-1 py-3 bg-sky-500 text-white rounded-xl font-bold text-sm">儲存變更</button></div>
+                                        <div className="flex gap-2"><button onClick={()=>setIsEditing(false)} className="flex-1 py-3 bg-slate-100 text-slate-500 rounded-xl font-bold text-sm">取消</button><button onClick={handleSave} className="flex-1 py-3 bg-sky-500 text-white rounded-xl font-bold text-sm shadow-lg shadow-sky-100">儲存變更</button></div>
                                     </>
                                 ) : (
                                     <>
                                         <div className="flex gap-2 mb-1">
-                                            <button onClick={() => { if(window.confirm("確定刪除此票券？")) { onDelete(ticket.id, true); onClose(); } }} className="flex-1 py-4 text-sm font-black rounded-2xl text-white bg-red-500 flex items-center justify-center gap-2 shadow-xl"><Trash2 size={18}/> 刪除</button>
-                                            {!ticket.isDeleted && <button onClick={() => { if(ticket.completed || window.confirm("確定核銷？")) { onToggleComplete(ticket); onClose(); } }} className="flex-[2] py-4 text-sm font-black rounded-2xl text-white bg-emerald-500 flex items-center justify-center gap-2 shadow-xl">{ticket.completed ? <><RotateCcw size={18}/> 標記未用</> : <><CheckCircle2 size={18}/> 立即核銷</>}</button>}
+                                            <button 
+                                                onClick={() => { if(window.confirm("確定刪除此票券並視同核銷通知嗎？")) { onDelete(ticket.id, true); onClose(); } }} 
+                                                className="flex-1 py-4 text-sm font-black rounded-2xl shadow-xl flex items-center justify-center gap-2 text-white bg-red-500 hover:bg-red-600 transition-all active:scale-95"
+                                            >
+                                                <Trash2 size={18}/> 刪除
+                                            </button>
+                                            
+                                            {!ticket.isDeleted && (
+                                                <button 
+                                                    onClick={() => { if(ticket.completed || window.confirm("確定核銷？")) { onToggleComplete(ticket); onClose(); } }} 
+                                                    className="flex-[2] py-4 text-sm font-black rounded-2xl shadow-xl flex items-center justify-center gap-2 text-white bg-emerald-500 hover:bg-emerald-600 transition-all active:scale-95"
+                                                >
+                                                    {ticket.completed ? <><RotateCcw size={18}/> 標記未用</> : <><CheckCircle2 size={18}/> 立即核銷</>}
+                                                </button>
+                                            )}
                                         </div>
-                                        <div className="flex gap-2 h-10">
-                                            {ticket.isDeleted ? <button onClick={() => { onRestore(ticket); onClose(); }} className="flex-1 bg-emerald-50 text-emerald-600 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5"><RefreshCcw size={14}/> 還原</button> : <button onClick={() => setIsEditing(true)} className="flex-1 bg-slate-50 text-slate-500 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 border"><Pencil size={14}/> 編輯</button>}
-                                            <button onClick={onClose} className="flex-1 bg-slate-100 text-slate-500 font-bold rounded-xl text-xs">關閉</button>
+                                        
+                                        <div className="flex gap-2 h-11">
+                                            {ticket.isDeleted ? (
+                                                <button onClick={() => { onRestore(ticket); onClose(); }} className="flex-1 bg-emerald-50 text-emerald-600 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5"><RefreshCcw size={14}/> 還原</button> 
+                                            ) : (
+                                                <button onClick={() => setIsEditing(true)} className="flex-1 bg-slate-50 text-slate-500 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 border border-slate-100"><Pencil size={14}/> 編輯</button>
+                                            )}
+                                            <button onClick={onClose} className="flex-1 bg-slate-100 text-slate-500 font-bold rounded-xl flex items-center justify-center text-xs hover:bg-slate-200 transition-colors">關閉</button>
                                         </div>
                                     </>
                                 )}
@@ -800,7 +1240,12 @@
                     </div>
                 </div>
                 {showFullScreen && (ticket.originalImage || ticket.image) && (
-                    <div className="fixed inset-0 z-[60] bg-black flex items-center justify-center p-2" onClick={() => setShowFullScreen(false)}><img src={ticket.originalImage || ticket.image} className="max-w-full max-h-full object-contain" /></div>
+                    <div className="fixed inset-0 z-[60] bg-black flex items-center justify-center p-2 fullscreen-overlay" onClick={() => setShowFullScreen(false)}>
+                        <img src={ticket.originalImage || ticket.image} className="max-w-full max-h-full object-contain" />
+                        <button className="absolute top-6 right-6 px-4 py-2 bg-black/60 backdrop-blur-md text-white rounded-full flex items-center gap-2 font-bold shadow-lg border border-white/20 transition-transform active:scale-95" onClick={(e) => { e.stopPropagation(); setShowFullScreen(false); }}>
+                            <X size={20}/> 關閉
+                        </button>
+                    </div>
                 )}
                 </>
             );
@@ -808,63 +1253,75 @@
 
         const AddTicketModal = ({ isOpen, onClose, onAddBatch, allTags, templates, specificViewKeywords }) => {
             if (!isOpen) return null;
-            const [manualData, setManualData] = useState({ name: '', serial: '', expiry: '' });
+            const [manualData, setManualData] = useState({ name: '', serial: '', expiry: '', note: '' });
             const [manualTags, setManualTags] = useState([]);
-            const [thumb, setThumb] = useState('');
-            const [original, setOriginal] = useState('');
+            const [image, setImage] = useState('');
+            const [originalImage, setOriginalImage] = useState('');
 
             const handleApplyTemplate = (tid) => {
                 const t = templates.find(tt => tt.id === tid);
                 if (t) {
                     setManualData(prev => ({ ...prev, name: t.productName }));
-                    setThumb(t.image || ''); setOriginal(t.originalImage || ''); setManualTags(t.tags || []);
+                    setImage(t.image || '');
+                    setOriginalImage(t.originalImage || '');
+                    setManualTags(t.tags || []);
                 }
             };
 
             const handleManualSubmit = () => {
                 if (!manualData.name) { alert("請輸入名稱"); return; }
-                onAddBatch([{ id: 'task_' + Date.now(), productName: manualData.name, serial: manualData.serial, expiry: manualData.expiry.replace(/-/g, '/'), image: thumb, originalImage: original, tags: manualTags, completed: false, isDeleted: false, createdAt: Date.now() }]);
+                onAddBatch([{ id: 'task_' + Date.now(), productName: manualData.name, serial: manualData.serial, expiry: manualData.expiry.replace(/-/g, '/'), note: manualData.note, image: image, originalImage: originalImage, tags: manualTags, completed: false, isDeleted: false, createdAt: Date.now() }]);
                 onClose();
             };
 
-            const handleImageUpload = async (e, type) => {
-                const file = e.target.files[0];
-                if(file) {
-                    try { 
-                        const base64 = (type === 'thumb') ? await compressImage(file, 0.5, 400) : await compressImage(file, 0.9, 1600);
-                        if(type === 'thumb') setThumb(base64); else setOriginal(base64);
-                    } catch(err) { alert("失敗：" + err.message); }
-                }
-            };
-
             return (
-                <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-end sm:items-center justify-center p-4 animate-fade-in backdrop-blur-sm" onClick={onClose}>
-                    <div className="bg-white w-full sm:w-[450px] rounded-t-[32px] sm:rounded-3xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
-                        <h2 className="text-xl font-black text-slate-800 mb-4">新增票券</h2>
+                <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-end sm:items-center justify-center animate-fade-in backdrop-blur-sm" onClick={onClose}>
+                    <div className="bg-white w-full sm:w-[450px] sm:rounded-3xl rounded-t-[32px] p-6 shadow-2xl max-h-[90vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
+                        <div className="flex justify-between items-center mb-4"><h2 className="text-xl font-black text-slate-800">新增票券</h2><button onClick={onClose} className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200"><X size={18}/></button></div>
+                        
                         {templates?.length > 0 && (
                             <div className="mb-4">
-                                <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">套用範本</label>
-                                <select onChange={e => handleApplyTemplate(e.target.value)} className="w-full p-3 bg-sky-50 rounded-xl text-xs font-bold text-sky-600 outline-none">
-                                    <option value="">選擇範本...</option>{templates.map(t => <option key={t.id} value={t.id}>{t.templateName}</option>)}
+                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1 mb-1 block">快速套用範本</label>
+                                <select onChange={e => handleApplyTemplate(e.target.value)} className="w-full p-3 bg-sky-50 rounded-xl border-none outline-none text-xs font-bold text-sky-600 appearance-none">
+                                    <option value="">選擇範本...</option>
+                                    {templates.map(t => <option key={t.id} value={t.id}>{t.templateName}</option>)}
                                 </select>
                             </div>
                         )}
-                        <div className="space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
+
+                        <div className="space-y-3">
+                            {/* [CR-FUNC] 縮圖與原圖分開上傳介面 */}
+                            <div className="grid grid-cols-2 gap-4 mb-2">
                                 <div className="space-y-2">
-                                    <label className="text-[10px] font-bold text-slate-400 block text-center">票券縮圖 (清單用)</label>
-                                    <div className="w-full aspect-square bg-slate-50 border border-dashed rounded-2xl flex items-center justify-center relative overflow-hidden">{thumb ? <img src={thumb} className="w-full h-full object-cover"/> : <ImageIcon className="text-slate-200"/>}<input type="file" className="absolute inset-0 opacity-0" accept="image/*" onChange={e=>handleImageUpload(e, 'thumb')}/></div>
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1 block">縮圖 (必填)</label>
+                                    <div className="aspect-square bg-slate-50 border border-dashed border-slate-300 rounded-2xl flex flex-col items-center justify-center relative overflow-hidden group">
+                                        {image ? <img src={image} className="w-full h-full object-cover"/> : <><ImageIcon className="text-slate-300 mb-1"/><span className="text-[9px] text-slate-400">上傳縮圖</span></>}
+                                        <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" onChange={async e => {
+                                            const file = e.target.files[0];
+                                            if(file) { const base64 = await compressImage(file, 0.4, 400); setImage(base64); }
+                                        }}/>
+                                    </div>
                                 </div>
                                 <div className="space-y-2">
-                                    <label className="text-[10px] font-bold text-slate-400 block text-center">核銷原圖 (展示用)</label>
-                                    <div className="w-full aspect-square bg-slate-50 border border-dashed rounded-2xl flex items-center justify-center relative overflow-hidden">{original ? <img src={original} className="w-full h-full object-cover"/> : <ImageIcon className="text-slate-200"/>}<input type="file" className="absolute inset-0 opacity-0" accept="image/*" onChange={e=>handleImageUpload(e, 'orig')}/></div>
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1 block">原圖 (高品質)</label>
+                                    <div className="aspect-square bg-slate-50 border border-dashed border-slate-300 rounded-2xl flex flex-col items-center justify-center relative overflow-hidden group">
+                                        {originalImage ? <img src={originalImage} className="w-full h-full object-cover"/> : <><FileImage className="text-slate-300 mb-1"/><span className="text-[9px] text-slate-400">上傳原圖</span></>}
+                                        <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" onChange={async e => {
+                                            const file = e.target.files[0];
+                                            if(file) { const base64 = await compressImage(file, 0.9, 1600); setOriginalImage(base64); }
+                                        }}/>
+                                    </div>
                                 </div>
                             </div>
+
                             <input className="w-full p-3.5 bg-slate-50 rounded-xl outline-none font-bold" placeholder="票券名稱 (必填)" value={manualData.name} onChange={e=>setManualData({...manualData, name: e.target.value})}/>
                             <TagSelectInput allTags={allTags} selectedTags={manualTags} onTagsChange={setManualTags} extraSuggestions={specificViewKeywords} />
                             <input className="w-full p-3.5 bg-slate-50 rounded-xl outline-none font-mono text-sm" placeholder="序號/代碼" value={manualData.serial} onChange={e=>setManualData({...manualData, serial: e.target.value})}/>
-                            <div><label className="text-[10px] font-bold text-slate-400 pl-1 uppercase">兌換期限</label><input type="date" className="w-full p-3.5 bg-slate-50 rounded-xl outline-none text-sm font-bold text-slate-600" value={manualData.expiry} onChange={e=>setManualData({...manualData, expiry: e.target.value})}/></div>
-                            <button onClick={handleManualSubmit} className="w-full bg-sky-500 text-white py-4 rounded-2xl font-bold shadow-lg shadow-sky-100">確認新增</button>
+                            <div className="space-y-1">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">兌換期限</label>
+                                <input type="date" className="w-full p-3.5 bg-slate-50 rounded-xl outline-none text-sm font-bold text-slate-600" value={manualData.expiry} onChange={e=>setManualData({...manualData, expiry: e.target.value})}/>
+                            </div>
+                            <button onClick={handleManualSubmit} className="w-full bg-sky-500 text-white py-3.5 rounded-2xl font-bold shadow-lg mt-2">確認新增</button>
                         </div>
                     </div>
                 </div>
@@ -872,43 +1329,82 @@
         };
 
         const BatchEditModal = ({ isOpen, onClose, selectedCount, onBatchUpdate, allTags, templates }) => {
+             const [tagsToAdd, setTagsToAdd] = useState([]);
              const [newName, setNewName] = useState('');
              const [newExpiry, setNewExpiry] = useState('');
-             const [newThumb, setNewThumb] = useState('');
-             const [tagsToAdd, setTagsToAdd] = useState([]);
+             const [newImage, setNewImage] = useState('');
 
              if(!isOpen) return null;
 
-             const handleConfirm = () => { 
-                // [CR-FUNC] 批量更新僅支援縮圖與基本欄位，不支援原圖（依指示）
-                onBatchUpdate({ productName: newName, expiry: newExpiry, image: newThumb, tags: tagsToAdd }); onClose(); 
+             const handleApplyTemplate = (tid) => {
+                const t = templates.find(tt => tt.id === tid);
+                if (t) {
+                    setNewName(t.productName);
+                    setNewImage(t.image || '');
+                    setTagsToAdd(t.tags || []);
+                }
              };
 
-             const handleImageUpload = async (e) => {
-                const file = e.target.files[0];
-                if(file) { const base64 = await compressImage(file, 0.5, 400); setNewThumb(base64); }
+             const handleConfirm = () => { 
+                onBatchUpdate({ 
+                    productName: newName, 
+                    expiry: newExpiry, 
+                    image: newImage, 
+                    tags: tagsToAdd 
+                }); 
+                onClose(); 
              };
 
              return (
-                <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-end sm:items-center justify-center p-4 animate-fade-in" onClick={onClose}>
-                     <div className="bg-white w-full sm:w-[420px] rounded-t-[32px] sm:rounded-3xl p-6 shadow-2xl max-h-[85vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
+                <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-end sm:items-center justify-center animate-fade-in" onClick={onClose}>
+                     <div className="bg-white w-full sm:w-[420px] sm:rounded-3xl rounded-t-[32px] p-6 shadow-2xl max-h-[85vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
                         <h2 className="text-xl font-black mb-1 text-slate-800">批量編輯</h2>
-                        <p className="text-xs font-bold text-slate-400 mb-4">選取 {selectedCount} 筆</p>
-                        <div className="space-y-4">
-                            <div><label className="text-xs font-bold text-slate-500 uppercase block mb-1">名稱</label><input className="w-full p-3 bg-slate-50 rounded-xl outline-none font-bold" placeholder="留空則不變更" value={newName} onChange={e=>setNewName(e.target.value)}/></div>
-                            <div className="flex items-center gap-3">
-                                <div className="w-16 h-16 bg-slate-100 rounded-xl border border-dashed flex items-center justify-center relative overflow-hidden">{newThumb ? <img src={newThumb} className="w-full h-full object-cover"/> : <ImageIcon className="text-slate-300" size={16}/>}<input type="file" className="absolute inset-0 opacity-0" accept="image/*" onChange={handleImageUpload}/></div>
-                                <div className="text-[10px] text-slate-400 font-bold">批量更換票券縮圖</div>
+                        <p className="text-xs font-bold text-slate-400 mb-4">已選取 {selectedCount} 張票券</p>
+
+                        {templates?.length > 0 && (
+                            <div className="mb-4">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1 mb-1 block">快速套用範本</label>
+                                <select onChange={e => handleApplyTemplate(e.target.value)} className="w-full p-3 bg-sky-50 rounded-xl border-none outline-none text-xs font-bold text-sky-600">
+                                    <option value="">選擇範本...</option>
+                                    {templates.map(t => <option key={t.id} value={t.id}>{t.templateName}</option>)}
+                                </select>
                             </div>
-                            <div><label className="text-xs font-bold text-slate-500 uppercase block mb-1">期限</label><input type="date" className="w-full p-3 bg-slate-50 rounded-xl outline-none text-sm font-bold text-slate-600" value={newExpiry} onChange={e=>setNewExpiry(e.target.value)}/></div>
-                            <div><label className="text-xs font-bold text-slate-500 uppercase block mb-1">標籤</label><TagSelectInput allTags={allTags} selectedTags={tagsToAdd} onTagsChange={setTagsToAdd} /></div>
+                        )}
+
+                        <div className="space-y-4">
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">變更名稱</label>
+                                <input className="w-full p-3 bg-slate-50 rounded-xl outline-none font-bold" placeholder="留空則不變更" value={newName} onChange={e=>setNewName(e.target.value)}/>
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">變更縮圖 (批量僅改縮圖)</label>
+                                <div className="flex items-center gap-3">
+                                    <div className="w-16 h-16 bg-slate-100 rounded-xl flex items-center justify-center border border-dashed border-slate-300 relative overflow-hidden">
+                                        {newImage ? <img src={newImage} className="w-full h-full object-cover"/> : <ImageIcon className="text-slate-300" size={16}/>}
+                                        <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" onChange={async e => {
+                                            const file = e.target.files[0];
+                                            if(file) { const base64 = await compressImage(file, 0.4, 400); setNewImage(base64); }
+                                        }}/>
+                                    </div>
+                                    <div className="text-[10px] text-slate-400 font-bold">點擊上傳新縮圖</div>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">變更期限</label>
+                                <input type="date" className="w-full p-3 bg-slate-50 rounded-xl outline-none text-sm font-bold text-slate-600" value={newExpiry} onChange={e=>setNewExpiry(e.target.value)}/>
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">新增標籤</label>
+                                <TagSelectInput allTags={allTags} selectedTags={tagsToAdd} onTagsChange={setTagsToAdd} />
+                            </div>
                         </div>
-                        <div className="flex gap-3 mt-6"><button onClick={onClose} className="flex-1 py-3 bg-slate-100 font-bold rounded-2xl text-slate-500">取消</button><button onClick={handleConfirm} className="flex-1 py-3 bg-sky-500 font-bold rounded-2xl text-white shadow-lg shadow-sky-200">儲存變更</button></div>
+                        <div className="flex gap-3 mt-6"><button onClick={onClose} className="flex-1 py-3 bg-slate-100 font-bold rounded-2xl text-slate-500">取消</button><button onClick={handleConfirm} className="flex-1 py-3 bg-sky-500 font-bold rounded-2xl text-white shadow-lg shadow-sky-200 hover:bg-sky-600 transition-colors">儲存變更</button></div>
                      </div>
                 </div>
              );
         };
 
+        // --- Main App ---
         const App = () => {
             const [tasks, setTasks] = useState([]);
             const [view, setView] = useState('active');
@@ -921,28 +1417,57 @@
             const [isSelectionMode, setIsSelectionMode] = useState(false);
             const [selectedIds, setSelectedIds] = useState(new Set());
             const [showBatchModal, setShowBatchModal] = useState(false);
+            
             const [showDataModal, setShowDataModal] = useState(false);
             const [importPendingData, setImportPendingData] = useState(null);
-            const [showSettings, setShowSettings] = useState(false);
-            const [bgHistory, setBgHistory] = useState([]);
-            const [isDataLoaded, setIsDataLoaded] = useState(false);
 
             const [settings, setSettings] = useState({ 
                 tgToken: '', tgChatId: '', notifyDays: 7, appTitle: '我的票夾',
-                specificViewKeywords: ['MOMO', '85度C'], templates: [],
-                bgConfigMap: {}, viewConfigs: { active: { ...defaultViewConfig } }
+                specificViewKeywords: ['MOMO', '85度C'], 
+                templates: [],
+                bgConfigMap: {}, 
+                viewConfigs: {
+                    active: { ...defaultViewConfig },
+                    completed: { ...defaultViewConfig },
+                    deleted: { ...defaultViewConfig }
+                }
+            });
+            const [bgHistory, setBgHistory] = useState([]);
+            const [showSettings, setShowSettings] = useState(false);
+            const [showTagManager, setShowTagManager] = useState(false);
+            const [isDataLoaded, setIsDataLoaded] = useState(false);
+
+            const migrateConfig = (config) => ({
+                ...defaultViewConfig, ...config,
+                bgSize: typeof config?.bgSize === 'number' ? config.bgSize : 100,
+                bgPosY: typeof config?.bgPosY === 'number' ? config.bgPosY : 50,
+                bgOpacity: typeof config?.bgOpacity === 'number' ? config.bgOpacity : 1 
             });
 
             useEffect(() => {
                 const initData = async () => {
-                    await dbHelper.init();
-                    const dbTasks = await dbHelper.getItem('wallet_tasks_v3');
-                    const dbSettings = await dbHelper.getItem('wallet_settings_v3');
-                    const dbBgHistory = await dbHelper.getItem('wallet_bg_history_v3');
-                    if (dbTasks) setTasks(dbTasks);
-                    if (dbSettings) setSettings({ ...settings, ...dbSettings, templates: dbSettings.templates || [], viewConfigs: { active: { ...defaultViewConfig, ...dbSettings.viewConfigs?.active } } });
-                    if (dbBgHistory) setBgHistory(dbBgHistory);
-                    setIsDataLoaded(true);
+                    try {
+                        await dbHelper.init();
+                        const dbTasks = await dbHelper.getItem('wallet_tasks_v3');
+                        const dbSettings = await dbHelper.getItem('wallet_settings_v3');
+                        const dbBgHistory = await dbHelper.getItem('wallet_bg_history_v3');
+
+                        if (dbTasks) setTasks(dbTasks);
+                        if (dbSettings) {
+                            const mergedSettings = {
+                                ...settings, ...dbSettings,
+                                templates: dbSettings.templates || [],
+                                viewConfigs: {
+                                    active: migrateConfig(dbSettings.viewConfigs?.active),
+                                    completed: migrateConfig(dbSettings.viewConfigs?.completed),
+                                    deleted: migrateConfig(dbSettings.viewConfigs?.deleted),
+                                }
+                            };
+                            setSettings(mergedSettings);
+                        }
+                        if (dbBgHistory) setBgHistory(dbBgHistory);
+                        setIsDataLoaded(true);
+                    } catch (err) { console.error("Database initialization failed:", err); }
                 };
                 initData();
             }, []);
@@ -953,7 +1478,8 @@
 
             const allTags = useMemo(() => [...new Set(tasks.flatMap(t => t.tags || []))], [tasks]);
             const duplicateSerials = useMemo(() => {
-                const counts = {}; tasks.forEach(t => { if (!t.isDeleted && t.serial) counts[t.serial] = (counts[t.serial] || 0) + 1; });
+                const counts = {};
+                tasks.forEach(t => { if (!t.isDeleted && t.serial) counts[t.serial] = (counts[t.serial] || 0) + 1; });
                 return new Set(Object.keys(counts).filter(s => counts[s] > 1));
             }, [tasks]);
 
@@ -962,71 +1488,153 @@
                     if (view === 'active' && (t.completed || t.isDeleted)) return false;
                     if (view === 'completed' && (!t.completed || t.isDeleted)) return false;
                     if (view === 'deleted' && !t.isDeleted) return false;
-                    if (activeTag === 'special_expiring') return !t.completed && !t.isDeleted && t.expiry && checkIsExpiringSoon(t.expiry, settings.notifyDays);
+                    if (activeTag === 'special_expiring') return checkIsExpiringSoon(t.expiry, settings.notifyDays) && !t.completed && !t.isDeleted;
+                    if (activeTag === 'special_duplicate') return duplicateSerials.has(t.serial) && !t.completed && !t.isDeleted;
                     if (activeTag !== 'all' && (!t.tags || !t.tags.includes(activeTag))) return false;
-                    if (searchQuery) return t.productName.toLowerCase().includes(searchQuery.toLowerCase());
+                    if (searchQuery) {
+                        const q = searchQuery.toLowerCase();
+                        return t.productName.toLowerCase().includes(q) || (t.note && t.note.toLowerCase().includes(q)) || (t.tags && t.tags.some(tag => tag.toLowerCase().includes(q)));
+                    }
                     return true;
                 });
                 result.sort((a, b) => {
-                    if (sortType === 'newest') return b.createdAt - a.createdAt;
-                    if (sortType === 'oldest') return a.createdAt - b.createdAt;
-                    const dateA = a.expiry ? new Date(a.expiry.replace(/\//g, '-')) : new Date(9999, 11, 31);
-                    const dateB = b.expiry ? new Date(b.expiry.replace(/\//g, '-')) : new Date(9999, 11, 31);
-                    return dateA - dateB;
+                    if (sortType === 'expiring') {
+                        const dateA = a.expiry ? new Date(a.expiry.replace(/\//g, '-')) : new Date(9999, 11, 31);
+                        const dateB = b.expiry ? new Date(b.expiry.replace(/\//g, '-')) : new Date(9999, 11, 31);
+                        return dateA - dateB;
+                    } 
+                    return 0;
                 });
                 return result;
-            }, [tasks, view, activeTag, searchQuery, sortType, settings.notifyDays]);
+            }, [tasks, view, activeTag, searchQuery, sortType, duplicateSerials, settings.notifyDays]);
 
+            const handleAddBatch = (newItems) => setTasks(prev => [...newItems, ...prev]);
+            const handleUpdate = (updatedTicket) => setTasks(prev => prev.map(t => t.id === updatedTicket.id ? updatedTicket : t));
+            
+            const handleSaveTemplate = (templateData) => {
+                const newTid = 'template_' + Date.now();
+                setSettings(prev => ({
+                    ...prev,
+                    templates: [{ ...templateData, id: newTid }, ...(prev.templates || [])]
+                }));
+            };
+
+            const handleToggleComplete = async (ticket) => {
+                const newStatus = !ticket.completed;
+                const completedAt = newStatus ? Date.now() : null; 
+                setTasks(prev => prev.map(t => t.id === ticket.id ? { ...t, completed: newStatus, completedAt: completedAt } : t));
+            };
+
+            const handleDelete = (id, forceNotify = false) => {
+                const now = Date.now();
+                if(view === 'deleted') { if(confirm("確定永久刪除？")) setTasks(prev => prev.filter(t => t.id !== id)); }
+                else { setTasks(prev => prev.map(t => id === t.id ? { ...t, isDeleted: true, deletedAt: now } : t)); }
+            };
+
+            const handleRestore = (ticket) => setTasks(prev => prev.map(t => t.id === ticket.id ? { ...t, isDeleted: false, deletedAt: null } : t));
+            const handleDeleteTag = (tag) => setTasks(prev => prev.map(t => ({ ...t, tags: (t.tags||[]).filter(tt => tt !== tag) })));
+            
+            const handleBackup = () => {
+                const backupData = { version: 3, timestamp: Date.now(), settings: settings, tasks: tasks };
+                const blob = new Blob([JSON.stringify(backupData, null, 2)], {type: "application/json"});
+                const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `ticket_backup_${new Date().toISOString().split('T')[0]}.json`; a.click();
+            };
+            
+            const handleImportClick = () => {
+                const input = document.createElement('input'); input.type = 'file';
+                input.onchange = e => {
+                    const r = new FileReader(); 
+                    r.onload = ev => { try { setImportPendingData(JSON.parse(ev.target.result)); setShowDataModal(false); } catch(e){alert("格式錯誤");} };
+                    r.readAsText(e.target.files[0]);
+                }; input.click();
+            };
+
+            const executeImport = (mode, restoreSettings) => {
+                if (!importPendingData) return;
+                const importedTasks = Array.isArray(importPendingData) ? importPendingData : (importPendingData.tasks || []);
+                if (restoreSettings && importPendingData.settings) setSettings(importPendingData.settings);
+                if (mode === 'append') setTasks(prev => [...prev, ...importedTasks]);
+                else setTasks(importedTasks);
+                setImportPendingData(null);
+            };
+
+            const handleFullReset = async () => {
+                if (window.confirm("確定重設嗎？")) { await dbHelper.removeItem('wallet_tasks_v3'); window.location.reload(); }
+            };
+            
+            const handleSelect = (id) => { const s = new Set(selectedIds); if(s.has(id)) s.delete(id); else s.add(id); setSelectedIds(s); };
+            const handleSelectAll = () => setSelectedIds(selectedIds.size === filteredTasks.length ? new Set() : new Set(filteredTasks.map(t => t.id)));
+            
             const handleBatchUpdate = (data) => {
                 setTasks(prev => prev.map(t => {
                     if (!selectedIds.has(t.id)) return t;
                     let nt = { ...t };
                     if (data.productName) nt.productName = data.productName;
                     if (data.expiry) nt.expiry = data.expiry.replace(/-/g, '/');
-                    if (data.image) nt.image = data.image; // 批量修改僅支援縮圖
+                    if (data.image) nt.image = data.image;
                     if (data.tags && data.tags.length > 0) nt.tags = Array.from(new Set([...(t.tags || []), ...data.tags]));
                     return nt;
                 }));
-                setSelectedIds(new Set()); setIsSelectionMode(false);
+                setSelectedIds(new Set());
+                setIsSelectionMode(false);
             };
 
-            const handleSaveTemplate = (td) => setSettings(s => ({ ...s, templates: [{ ...td, id: 'template_' + Date.now() }, ...(s.templates || [])] }));
+            const handleSaveSettings = (newSettings) => setSettings(newSettings);
+            const handleRemoveHistory = (url) => setBgHistory(prev => prev.filter(item => item !== url));
+            const handleAddToHistory = (newBg) => setBgHistory(prev => [newBg, ...prev.filter(bg => bg !== newBg)].slice(0, 20));
             const handleQuickBgChange = () => {
                 const history = [''].concat(bgHistory);
+                // [CR-FUNC] 快速切換背景統一寫回 'active'
                 const currentBg = settings.viewConfigs.active.backgroundImage || '';
                 const nextBg = history[(history.indexOf(currentBg) + 1) % history.length] || '';
                 setSettings(prev => {
-                    let active = { ...prev.viewConfigs.active, backgroundImage: nextBg };
-                    const shared = prev.bgConfigMap?.[nextBg];
-                    if (shared) { active.bgSize = shared.bgSize; active.bgPosY = shared.bgPosY; }
-                    return { ...prev, viewConfigs: { active } };
+                    let next = { ...prev };
+                    let activeView = { ...next.viewConfigs.active, backgroundImage: nextBg };
+                    next.viewConfigs = { ...next.viewConfigs, active: activeView };
+                    return next;
                 });
             };
 
-            if (!isDataLoaded) return null;
-            // [CR-FUNC] 所有頁面強制讀取 'active' 背景配置
-            const currentConfig = settings.viewConfigs.active;
+            if (!isDataLoaded) return <div className="fixed inset-0 bg-slate-50 flex items-center justify-center">載入中...</div>;
+            
+            // [CR-FUNC] 強制所有分頁共用 'active' 配置
+            const currentConfig = settings.viewConfigs.active || defaultViewConfig;
 
             return (
                 <>
                     {currentConfig.backgroundImage && <div className="fixed inset-0 z-0 mx-auto max-w-md" style={{ top: '150px', backgroundImage: `url(${currentConfig.backgroundImage})`, backgroundSize: `${currentConfig.bgSize || 100}% auto`, backgroundPosition: `center ${currentConfig.bgPosY || 50}%`, backgroundRepeat: 'no-repeat', opacity: currentConfig.bgOpacity || 1 }} />}
-                    <div className="max-w-md mx-auto min-h-screen relative shadow-2xl z-10" style={{ backgroundColor: currentConfig.backgroundImage ? 'transparent' : '#f8fafc' }}>
-                        <Header appTitle={settings.appTitle} onTitleChange={(t) => setSettings(s => ({...s, appTitle: t}))} onOpenSettings={() => setShowSettings(true)} onOpenMenu={() => setShowDataModal(true)} sortType={sortType} setSortType={setSortType} searchQuery={searchQuery} setSearchQuery={setSearchQuery} isSelectionMode={isSelectionMode} setIsSelectionMode={setIsSelectionMode} selectedCount={selectedIds.size} onSelectAll={() => setSelectedIds(selectedIds.size === filteredTasks.length ? new Set() : new Set(filteredTasks.map(t => t.id)))} isCompact={isCompact} setIsCompact={setIsCompact} view={view} setView={setView} activeTag={activeTag} setActiveTag={setActiveTag} allTags={allTags} onQuickBgChange={handleQuickBgChange} headerBackgroundImage={currentConfig.headerBackgroundImage} />
-                        <div className="pt-2 min-h-[50vh]">{filteredTasks.map(t => <TicketCard key={t.id} ticket={t} onClick={setSelectedTicket} notifyDays={settings.notifyDays} isSelectionMode={isSelectionMode} isSelected={selectedIds.has(t.id)} onSelect={(id) => { const s = new Set(selectedIds); if(s.has(id)) s.delete(id); else s.add(id); setSelectedIds(s); }} isDuplicate={duplicateSerials.has(t.serial)} opacity={currentConfig.cardOpacity} cardBgColor={currentConfig.cardBgColor} cardBorderColor={currentConfig.cardBorderColor} isCompact={isCompact} compactHeight={currentConfig.compactHeight} compactShowImage={currentConfig.compactShowImage} />)}</div>
-                        {isSelectionMode ? <div className="fixed bottom-10 left-1/2 -translate-x-1/2 flex gap-3 z-40 animate-slide-up">
-                            {selectedIds.size > 0 && <><button onClick={() => setShowBatchModal(true)} className="bg-sky-500 text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-sky-200">批量編輯</button><button onClick={() => { if(confirm("刪除？")) { setTasks(prev => prev.map(t => selectedIds.has(t.id) ? { ...t, isDeleted: true, deletedAt: Date.now() } : t)); setSelectedIds(new Set()); setIsSelectionMode(false); } }} className="bg-red-500 text-white px-4 py-3 rounded-2xl font-bold shadow-lg">刪除</button></>}
-                            <button onClick={() => setIsSelectionMode(false)} className="bg-slate-800 text-white px-4 py-3 rounded-2xl font-bold shadow-lg">取消</button>
-                        </div> : <button onClick={() => setShowAddModal(true)} className="fixed bottom-10 right-5 w-16 h-16 bg-sky-500 text-white rounded-[24px] shadow-2xl flex items-center justify-center text-3xl active:scale-90 z-40"><Plus size={32}/></button>}
-                        <AddTicketModal isOpen={showAddModal} onClose={() => setShowAddModal(false)} onAddBatch={(items) => setTasks(prev => [...items, ...prev])} allTags={allTags} templates={settings.templates} specificViewKeywords={settings.specificViewKeywords} />
-                        <RedeemModal ticket={selectedTicket} onClose={() => setSelectedTicket(null)} onToggleComplete={(ticket) => setTasks(prev => prev.map(t => t.id === ticket.id ? { ...t, completed: !t.completed, completedAt: !t.completed ? Date.now() : null } : t))} onDelete={(id) => setTasks(prev => prev.map(t => t.id === id ? { ...t, isDeleted: true, deletedAt: Date.now() } : t))} onRestore={(ticket) => setTasks(prev => prev.map(t => t.id === ticket.id ? { ...t, isDeleted: false, deletedAt: null } : t))} onUpdate={(ut) => setTasks(prev => prev.map(t => t.id === ut.id ? ut : t))} onSaveTemplate={handleSaveTemplate} allTags={allTags} specificViewKeywords={settings.specificViewKeywords} />
-                        <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} settings={settings} bgHistory={bgHistory} onSave={(ns) => { setSettings(ns); const img = ns.viewConfigs.active.backgroundImage; if(img) setBgHistory(prev => [img, ...prev.filter(b=>b!==img)].slice(0, 20)); }} onRemoveHistory={(u) => setBgHistory(p => p.filter(i=>i!==u))} onAddToHistory={(n) => setBgHistory(p => [n, ...p.filter(b=>b!==n)].slice(0, 20))} />
+                    
+                    <div className="max-w-md mx-auto min-h-screen relative shadow-2xl sm:border-x border-slate-200 z-10" style={{ backgroundColor: currentConfig.backgroundImage ? 'transparent' : '#f8fafc' }}>
+                        <Header 
+                            appTitle={settings.appTitle} onTitleChange={(t) => setSettings(s => ({...s, appTitle: t}))}
+                            onOpenSettings={() => setShowSettings(true)}
+                            onOpenMenu={() => setShowDataModal(true)}
+                            sortType={sortType} setSortType={setSortType} searchQuery={searchQuery} setSearchQuery={setSearchQuery} isSelectionMode={isSelectionMode} setIsSelectionMode={setIsSelectionMode} selectedCount={selectedIds.size} onSelectAll={handleSelectAll} isCompact={isCompact} setIsCompact={setIsCompact} view={view} setView={setView} activeTag={activeTag} setActiveTag={setActiveTag} allTags={allTags} onQuickBgChange={handleQuickBgChange} headerBackgroundImage={currentConfig.headerBackgroundImage}
+                        />
+                        <div className="pt-2 min-h-[50vh] transition-colors">{filteredTasks.length > 0 ? filteredTasks.map(t => <TicketCard key={t.id} ticket={t} onClick={setSelectedTicket} notifyDays={settings.notifyDays} isSelectionMode={isSelectionMode} isSelected={selectedIds.has(t.id)} onSelect={handleSelect} isDuplicate={duplicateSerials.has(t.serial)} opacity={currentConfig.cardOpacity} cardBgColor={currentConfig.cardBgColor} cardBorderColor={currentConfig.cardBorderColor} isCompact={isCompact} compactHeight={currentConfig.compactHeight} compactShowImage={currentConfig.compactShowImage} />) : <div className="text-center py-24 text-slate-300"><p className="font-bold">暫無票券</p></div>}</div>
+                        
+                        {isSelectionMode ? (
+                            <div className="fixed bottom-10 left-1/2 -translate-x-1/2 flex gap-3 z-40 animate-slide-up">
+                                {selectedIds.size > 0 && <><button onClick={() => setShowBatchModal(true)} className="bg-sky-500 text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-sky-200 flex items-center gap-2"><Pencil size={18}/> 批量編輯</button><button onClick={() => { if(confirm(`確定刪除 ${selectedIds.size} 項目？`)) { if(view === 'deleted') setTasks(prev => prev.filter(t => !selectedIds.has(t.id))); else { const now = Date.now(); setTasks(prev => prev.map(t => selectedIds.has(t.id) ? { ...t, isDeleted: true, deletedAt: now } : t)); } setSelectedIds(new Set()); setIsSelectionMode(false); } }} className="bg-white text-red-500 border border-red-100 px-4 py-3 rounded-2xl font-bold shadow-lg"><Trash2 size={18}/></button></>}
+                                <button onClick={() => {setIsSelectionMode(false); setSelectedIds(new Set());}} className="bg-slate-800 text-white px-4 py-3 rounded-2xl font-bold shadow-lg">取消</button>
+                            </div>
+                        ) : <button onClick={() => setShowAddModal(true)} className="fixed bottom-10 right-5 w-16 h-16 bg-sky-500 text-white rounded-[24px] shadow-2xl flex items-center justify-center text-3xl active:scale-90 transition-transform z-40"><Plus size={32}/></button>}
+
+                        <AddTicketModal isOpen={showAddModal} onClose={() => setShowAddModal(false)} onAddBatch={handleAddBatch} allTags={allTags} templates={settings.templates} specificViewKeywords={settings.specificViewKeywords} />
+                        <RedeemModal ticket={selectedTicket} onClose={() => setSelectedTicket(null)} onToggleComplete={handleToggleComplete} onDelete={handleDelete} onRestore={handleRestore} onUpdate={handleUpdate} onSaveTemplate={handleSaveTemplate} allTags={allTags} specificViewKeywords={settings.specificViewKeywords} />
+                        <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} settings={settings} bgHistory={bgHistory} onSave={handleSaveSettings} onRemoveHistory={handleRemoveHistory} onAddToHistory={handleAddToHistory} />
+                        <TagManagerModal isOpen={showTagManager} onClose={() => setShowTagManager(false)} tags={allTags} onDeleteTag={handleDeleteTag} />
                         <BatchEditModal isOpen={showBatchModal} onClose={() => setShowBatchModal(false)} selectedCount={selectedIds.size} onBatchUpdate={handleBatchUpdate} allTags={allTags} templates={settings.templates} />
-                        <DataActionsModal isOpen={showDataModal} onClose={() => setShowDataModal(false)} onBackup={() => { const b = new Blob([JSON.stringify({ version: 4, tasks, settings })], {type: "application/json"}); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = "backup.json"; a.click(); }} onImportClick={() => { const i = document.createElement('input'); i.type = 'file'; i.onchange = e => { const r = new FileReader(); r.onload = ev => { const d = JSON.parse(ev.target.result); setTasks(d.tasks || []); setSettings(s => ({ ...s, ...d.settings })); setShowDataModal(false); }; r.readAsText(e.target.files[0]); }; i.click(); }} onReset={() => { if(confirm("確定？")) { dbHelper.removeItem('wallet_tasks_v3'); dbHelper.removeItem('wallet_settings_v3'); window.location.reload(); } }} />
+                        
+                        <DataActionsModal isOpen={showDataModal} onClose={() => setShowDataModal(false)} onBackup={handleBackup} onImportClick={handleImportClick} onReset={handleFullReset} />
+                        <ImportConfirmModal isOpen={!!importPendingData} data={importPendingData} onCancel={() => setImportPendingData(null)} onConfirm={executeImport} />
                     </div>
                 </>
             );
         };
-        createRoot(document.getElementById('root')).render(<App />);
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
     </script>
 </body>
 </html>
