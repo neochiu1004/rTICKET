@@ -173,45 +173,55 @@
         const parseBatchTicketInfo = (text, overrideName) => {
             const results = [];
             const lines = text.split(/\r?\n/);
-            lines.forEach((rawLine, index) => {
+            // [CR-004] 使用 for 迴圈以支援上下文視窗掃描
+            for (let i = 0; i < lines.length; i++) {
+                const rawLine = lines[i];
                 const line = rawLine.trim();
-                if (!line) return;
-                let dateStr = "";
-                const dateMatch = line.match(/\d{4}[\/\-\.]\d{2}[\/\-\.]\d{2}/);
-                if (dateMatch) dateStr = dateMatch[0].replace(/[\.\-]/g, '/');
-                const lineWithoutDate = line.replace(/\d{4}[\/\-\.]\d{2}[\/\-\.]\d{2}/, '');
-                
-                let serialStr = "";
-                // [CR-001] 擴充關鍵字支持：票券序號
-                const serialMatch = lineWithoutDate.match(/(?:票券序號|券號|券號：|序號|CODE|Code|密碼|PIN)[:：\s]*([A-Za-z0-9]{8,})/i);
-                if (serialMatch && serialMatch[1]) {
-                    serialStr = serialMatch[1].trim();
-                } else {
-                    const potentialCodes = lineWithoutDate.match(/[A-Za-z0-9]{9,30}/g);
-                    if (potentialCodes) {
-                         const validCodes = potentialCodes.filter(code => !/^20\d{6}$/.test(code) && !/^\d{9,15}$/.test(code));
-                         if (validCodes.length > 0) serialStr = validCodes[0];
-                    }
-                }
+                if (!line) continue;
 
-                if (serialStr) {
-                    let finalName = overrideName || "Regex解析票券";
-                    // [CR-001] 優先從原文搜尋包含 【】 之品名資訊
-                    const bracketMatch = text.match(/【([^】]+)】/);
-                    if (bracketMatch && bracketMatch[1]) {
-                        finalName = bracketMatch[1].trim();
-                    } else if (!overrideName) {
-                         if (index > 0 && lines[index-1].trim().length > 2) finalName = lines[index-1].trim();
+                // [CR-001] 擴充序號關鍵字匹配，支援緊鄰中文字符邊界
+                const serialMatch = line.match(/(?:票券序號|券號|券號：|序號|CODE|Code|密碼|PIN)[:：\s]*([A-Za-z0-9]{8,})/i);
+                
+                if (serialMatch && serialMatch[1]) {
+                    const serialStr = serialMatch[1].trim();
+                    let dateStr = "";
+                    let finalName = overrideName || "";
+
+                    // [CR-004] 掃描視窗：以此行索引為中心，向上搜尋 2 行，向下搜尋 5 行
+                    const startIdx = Math.max(0, i - 2);
+                    const endIdx = Math.min(lines.length - 1, i + 5);
+
+                    for (let j = startIdx; j <= endIdx; j++) {
+                        const windowLine = lines[j].trim();
+                        if (!windowLine) continue;
+
+                        // 擷取日期 (格式支援 2026/06/17, 2026-06-17, 2026.06.17)
+                        if (!dateStr) {
+                            const dateMatch = windowLine.match(/\d{4}[\/\-\.]\d{2}[\/\-\.]\d{2}/);
+                            if (dateMatch) dateStr = dateMatch[0].replace(/[\.\-]/g, '/');
+                        }
+
+                        // 擷取品名 (優先搜尋 【】 格式)
+                        if (!finalName) {
+                            const bracketMatch = windowLine.match(/【([^】]+)】/);
+                            if (bracketMatch) finalName = bracketMatch[1].trim();
+                        }
+                    }
+
+                    // 備援邏輯：若視窗內無資訊，則採原邏輯
+                    if (!finalName) {
+                         if (i > 0 && lines[i-1].trim().length > 2) finalName = lines[i-1].trim();
                          else finalName = "未命名票券";
                     }
+
                     results.push({
-                        id: 'task_' + Date.now() + '_' + index + '_' + Math.random().toString(36).substr(2,5),
+                        id: 'task_' + Date.now() + '_' + i + '_' + Math.random().toString(36).substr(2,5),
                         text: rawLine, originalRaw: rawLine,
                         isTicket: true, serial: serialStr, productName: finalName, expiry: dateStr,
                         tags: [], images: [], image: '', completed: false, isDeleted: false, createdAt: Date.now(), note: '',
                     });
                 }
-            });
+            }
             return results;
         };
 
@@ -1045,7 +1055,6 @@
             );
         };
 
-        // [CR-002] 新增屬性引導：支援點擊顯示原圖
         const MomoTemplate = ({ ticket, onImageClick }) => {
             return (
                 <div className="w-full h-full flex flex-col bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-2xl animate-fade-in text-left">
