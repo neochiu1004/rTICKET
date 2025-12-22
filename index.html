@@ -182,9 +182,10 @@
                 const lineWithoutDate = line.replace(/\d{4}[\/\-\.]\d{2}[\/\-\.]\d{2}/, '');
                 
                 let serialStr = "";
-                const serialMatch = lineWithoutDate.match(/(?:券號|券號：|序號|CODE|Code|密碼|PIN)[:：\s]*([A-Za-z0-9\-\s]{8,})/i);
+                // [CR-001] 擴充關鍵字支持：票券序號
+                const serialMatch = lineWithoutDate.match(/(?:票券序號|券號|券號：|序號|CODE|Code|密碼|PIN)[:：\s]*([A-Za-z0-9]{8,})/i);
                 if (serialMatch && serialMatch[1]) {
-                    serialStr = serialMatch[1].trim().replace(/\s/g, '');
+                    serialStr = serialMatch[1].trim();
                 } else {
                     const potentialCodes = lineWithoutDate.match(/[A-Za-z0-9]{9,30}/g);
                     if (potentialCodes) {
@@ -195,7 +196,11 @@
 
                 if (serialStr) {
                     let finalName = overrideName || "Regex解析票券";
-                    if (!overrideName) {
+                    // [CR-001] 優先從原文搜尋包含 【】 之品名資訊
+                    const bracketMatch = text.match(/【([^】]+)】/);
+                    if (bracketMatch && bracketMatch[1]) {
+                        finalName = bracketMatch[1].trim();
+                    } else if (!overrideName) {
                          if (index > 0 && lines[index-1].trim().length > 2) finalName = lines[index-1].trim();
                          else finalName = "未命名票券";
                     }
@@ -1040,7 +1045,8 @@
             );
         };
 
-        const MomoTemplate = ({ ticket }) => {
+        // [CR-002] 新增屬性引導：支援點擊顯示原圖
+        const MomoTemplate = ({ ticket, onImageClick }) => {
             return (
                 <div className="w-full h-full flex flex-col bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-2xl animate-fade-in text-left">
                     <div className="bg-momo px-4 py-2.5 flex justify-between items-center text-white shrink-0">
@@ -1050,7 +1056,8 @@
                     <div className="flex-1 overflow-y-auto no-scrollbar">
                         <div className="p-3 space-y-3">
                             <div className="flex gap-3">
-                                <div className="w-20 h-20 shrink-0 border border-slate-100 rounded-lg overflow-hidden bg-slate-50 flex items-center justify-center">{ticket.image ? <img src={ticket.image} className="w-full h-full object-cover" /> : <ImageIcon className="text-slate-200" size={24} />}</div>
+                                {/* [CR-002] 綁定 onClick 觸發全螢幕檢視 */}
+                                <div onClick={onImageClick} className="w-20 h-20 shrink-0 border border-slate-100 rounded-lg overflow-hidden bg-slate-50 flex items-center justify-center cursor-zoom-in">{ticket.image ? <img src={ticket.image} className="w-full h-full object-cover" /> : <ImageIcon className="text-slate-200" size={24} />}</div>
                                 <div className="flex-1 min-w-0 flex flex-col justify-center"><h2 className="text-[15px] font-black text-slate-800 leading-tight line-clamp-2">{ticket.productName}</h2>
                                 </div>
                             </div>
@@ -1079,6 +1086,16 @@
             const [editTags, setEditTags] = useState(ticket.tags || []);
             const [editImage, setEditImage] = useState(ticket.image || '');
             
+            // [CR-003] 確保當 ticket Prop 變更時，強制同步編輯狀態
+            useEffect(() => {
+                if (ticket) {
+                    setEditName(ticket.productName);
+                    setEditExpiry(ticket.expiry);
+                    setEditTags(ticket.tags || []);
+                    setEditImage(ticket.image || '');
+                }
+            }, [ticket]);
+
             const isSpecificView = useMemo(() => {
                 const keywords = (specificViewKeywords && specificViewKeywords.length > 0) ? specificViewKeywords : ['MOMO', '85度C'];
                 const searchTarget = (ticket.productName + (ticket.tags || []).join('')).toUpperCase();
@@ -1149,12 +1166,12 @@
                                                 </button>
                                                 <div className="relative w-full flex-1 min-h-0 flex items-center justify-center cursor-zoom-in" onClick={() => setShowFullScreen(true)}>
                                                     <img src={ticket.image} className="max-h-full w-auto rounded-xl shadow-md border border-slate-100" />
-                                                    {/* [CR-004] 已移除此處絕對定位的冗餘按鈕區塊，統一由底部動作列處理 */}
                                                 </div>
                                                 {ticket.serial && (<div className="w-full space-y-2 shrink-0 pb-4"><div className="bg-white p-2 rounded-xl border border-slate-100"><BarcodeCanvas text={ticket.serial} /></div><div className="flex justify-center p-2 bg-white rounded-xl border border-slate-100 shrink-0"><QRCodeCanvas text={ticket.serial} size={100} /></div></div>)}
                                             </div>
                                         ) : isMomoMode ? (
-                                            <div className="h-full py-1"><MomoTemplate ticket={ticket} /></div>
+                                            /* [CR-002] 傳遞 onImageClick 回調予子元件 */
+                                            <div className="h-full py-1"><MomoTemplate ticket={ticket} onImageClick={() => setShowFullScreen(true)} /></div>
                                         ) : (
                                             <div className="h-full flex flex-col items-center justify-center gap-5 py-4">
                                                 {ticket.serial && <div className="w-full bg-white p-3 rounded-xl border border-slate-100 shadow-sm"><BarcodeCanvas text={ticket.serial} /></div>}
@@ -1170,7 +1187,6 @@
                                     <div className="flex gap-2"><button onClick={()=>setIsEditing(false)} className="flex-1 py-3 bg-slate-100 text-slate-500 rounded-xl font-bold text-sm">取消</button><button onClick={handleSave} className="flex-1 py-3 bg-sky-500 text-white rounded-xl font-bold text-sm shadow-lg shadow-sky-100">儲存變更</button></div>
                                 ) : (
                                     <>
-                                        {/* [CR-004] 統一操作區域：無論何種 viewMode，皆使用此處按鈕並保持固定位置 */}
                                         <div className="flex gap-2 mb-1">
                                             <button 
                                                 onClick={() => { if(window.confirm("確定刪除此票券並視同核銷通知嗎？")) { onDelete(ticket.id, true); onClose(); } }} 
@@ -1612,4 +1628,3 @@
     </script>
 </body>
 </html>
-
