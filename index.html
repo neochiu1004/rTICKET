@@ -1087,7 +1087,7 @@
             );
         };
 
-        const RedeemModal = ({ ticket, onClose, onToggleComplete, onDelete, onRestore, onUpdate, allTags, specificViewKeywords }) => {
+        const RedeemModal = ({ ticket, onClose, onToggleComplete, onDelete, onRestore, onUpdate, allTags, specificViewKeywords, onSaveTemplate }) => {
             if (!ticket) return null;
             const [isEditing, setIsEditing] = useState(false);
             const [editName, setEditName] = useState(ticket.productName);
@@ -1193,7 +1193,11 @@
                             )}
                             <div className="mt-4 shrink-0 flex flex-col gap-2">
                                 {isEditing ? (
-                                    <div className="flex gap-2"><button onClick={()=>setIsEditing(false)} className="flex-1 py-3 bg-slate-100 text-slate-500 rounded-xl font-bold text-sm">取消</button><button onClick={handleSave} className="flex-1 py-3 bg-sky-500 text-white rounded-xl font-bold text-sm shadow-lg shadow-sky-100">儲存變更</button></div>
+                                    <div className="flex gap-2">
+                                        <button onClick={()=>setIsEditing(false)} className="px-5 py-3 bg-slate-100 text-slate-500 rounded-xl font-bold text-sm">取消</button>
+                                        <button onClick={() => { const name = prompt("請輸入範本名稱"); if(name) onSaveTemplate({ label: name, productName: editName, image: editImage, tags: editTags }); }} className="px-5 py-3 bg-emerald-100 text-emerald-600 rounded-xl font-bold text-sm flex items-center gap-1 hover:bg-emerald-200"><LayoutDashboard size={16}/> 存範本</button>
+                                        <button onClick={handleSave} className="flex-1 py-3 bg-sky-500 text-white rounded-xl font-bold text-sm shadow-lg shadow-sky-100">儲存變更</button>
+                                    </div>
                                 ) : (
                                     <>
                                         <div className="flex gap-2 mb-1">
@@ -1240,7 +1244,7 @@
             );
         };
 
-        const AddTicketModal = ({ isOpen, onClose, onAddBatch, allTags, specificViewKeywords }) => {
+        const AddTicketModal = ({ isOpen, onClose, onAddBatch, allTags, specificViewKeywords, templates, onDeleteTemplate }) => {
             if (!isOpen) return null;
             // [CR-005] 鎖定初始狀態為 manual，並在 UI 隱藏 smart 模式選項
             const [activeTab, setActiveTab] = useState('manual'); 
@@ -1273,6 +1277,13 @@
                 }
             };
 
+            // [CR-007] 套用範本邏輯
+            const applyTemplate = (tpl) => {
+                 setManualData(prev => ({ ...prev, name: tpl.productName }));
+                 if (tpl.image) setImages([tpl.image]);
+                 if (tpl.tags && tpl.tags.length > 0) setManualTags(tpl.tags);
+            };
+
             return (
                 <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-end sm:items-center justify-center animate-fade-in backdrop-blur-sm" onClick={onClose}>
                     <div className="bg-white w-full sm:w-[450px] sm:rounded-3xl rounded-t-[32px] p-6 shadow-2xl max-h-[90vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
@@ -1280,6 +1291,24 @@
                         {/* [CR-005] 隱藏模式切換 Tab 與智慧解析介面，僅保留手動輸入 */}
                         {activeTab === 'manual' && (
                             <div className="space-y-3">
+                                {/* [CR-007] 範本選擇列 */}
+                                {templates && templates.length > 0 && (
+                                    <div className="mb-2">
+                                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1"><LayoutDashboard size={12}/> 快速套用範本</div>
+                                        <div className="flex gap-2 overflow-x-auto no-scrollbar py-1">
+                                            {templates.map(tpl => (
+                                                <div key={tpl.id} onClick={() => applyTemplate(tpl)} className="shrink-0 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl p-1 pr-2 cursor-pointer hover:bg-slate-100 transition-colors group">
+                                                     <div className="w-8 h-8 rounded-lg bg-white border border-slate-100 flex items-center justify-center overflow-hidden">
+                                                        {tpl.image ? <img src={tpl.image} className="w-full h-full object-cover"/> : <ImageIcon size={12} className="text-slate-300"/>}
+                                                     </div>
+                                                     <span className="text-xs font-bold text-slate-600 max-w-[80px] truncate">{tpl.label}</span>
+                                                     <button onClick={(e) => { e.stopPropagation(); onDeleteTemplate(tpl.id); }} className="text-slate-300 hover:text-red-500 p-0.5"><X size={12}/></button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
                                 <div className="flex items-center gap-3"><div className="w-20 h-20 bg-slate-50 border border-dashed border-slate-300 rounded-2xl flex items-center justify-center relative overflow-hidden">{images.length > 0 ? <img src={images[0]} className="w-full h-full object-cover"/> : <ImageIcon className="text-slate-300"/>}<input type="file" className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" onChange={handleImageUpload}/></div><div className="flex-1 text-xs font-bold text-slate-400">上傳票券照片 (選填)</div></div>
                                 <input className="w-full p-3.5 bg-slate-50 rounded-xl outline-none font-bold" placeholder="票券名稱 (必填)" value={manualData.name} onChange={e=>setManualData({...manualData, name: e.target.value})}/>
                                 <TagSelectInput allTags={allTags} selectedTags={manualTags} onTagsChange={setManualTags} extraSuggestions={specificViewKeywords} />
@@ -1325,7 +1354,7 @@
             );
         };
         
-        const BatchEditModal = ({ isOpen, onClose, selectedCount, onBatchEdit, allTags }) => {
+        const BatchEditModal = ({ isOpen, onClose, selectedCount, onBatchEdit, allTags, templates, onDeleteTemplate }) => {
              const [tagsToAdd, setTagsToAdd] = useState([]);
              const [clearTags, setClearTags] = useState(false);
              const [newName, setNewName] = useState('');
@@ -1345,6 +1374,16 @@
                  onClose(); 
              };
 
+             // [CR-007] 套用範本邏輯
+             const applyTemplate = (tpl) => {
+                 setNewName(tpl.productName);
+                 if (tpl.image) setNewImage(tpl.image);
+                 if (tpl.tags && tpl.tags.length > 0) {
+                     setTagsToAdd(tpl.tags);
+                     setClearTags(true);
+                 }
+            };
+
              return (
                 <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-end sm:items-center justify-center animate-fade-in overflow-y-auto p-4" onClick={onClose}>
                      <div className="bg-white w-full sm:w-[420px] sm:rounded-3xl rounded-t-[32px] p-6 shadow-2xl my-auto" onClick={e=>e.stopPropagation()}>
@@ -1357,6 +1396,23 @@
                         </div>
                         
                         <div className="space-y-5 max-h-[60vh] overflow-y-auto no-scrollbar pr-1">
+                             {/* [CR-007] 範本選擇列 */}
+                            {templates && templates.length > 0 && (
+                                <div className="bg-sky-50 p-3 rounded-2xl border border-sky-100">
+                                    <div className="text-[10px] font-bold text-sky-500 uppercase tracking-widest mb-1 flex items-center gap-1"><LayoutDashboard size={12}/> 套用範本 (自動清除舊標籤)</div>
+                                    <div className="flex gap-2 overflow-x-auto no-scrollbar py-1">
+                                        {templates.map(tpl => (
+                                            <div key={tpl.id} onClick={() => applyTemplate(tpl)} className="shrink-0 flex items-center gap-2 bg-white border border-sky-200 rounded-xl p-1 pr-2 cursor-pointer hover:bg-sky-100 transition-colors group">
+                                                 <div className="w-8 h-8 rounded-lg bg-sky-50 border border-sky-100 flex items-center justify-center overflow-hidden">
+                                                    {tpl.image ? <img src={tpl.image} className="w-full h-full object-cover"/> : <ImageIcon size={12} className="text-sky-300"/>}
+                                                 </div>
+                                                 <span className="text-xs font-bold text-sky-700 max-w-[80px] truncate">{tpl.label}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
                             {/* 名稱修改 */}
                             <div className="bg-slate-50 p-3 rounded-2xl">
                                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1"><Pencil size={12}/> 修改名稱</label>
@@ -1428,6 +1484,9 @@
             const [showDataModal, setShowDataModal] = useState(false);
             const [importPendingData, setImportPendingData] = useState(null);
 
+            // [CR-007] 範本狀態
+            const [templates, setTemplates] = useState([]);
+
             const [settings, setSettings] = useState({ 
                 tgToken: '', tgChatId: '', notifyDays: 7, appTitle: '我的票夾',
                 specificViewKeywords: ['MOMO', '85度C'], 
@@ -1454,7 +1513,7 @@
                 const initData = async () => {
                     try {
                         await dbHelper.init();
-                        const keys = ['wallet_tasks_v3', 'wallet_settings_v3', 'wallet_bg_history_v3'];
+                        const keys = ['wallet_tasks_v3', 'wallet_settings_v3', 'wallet_bg_history_v3', 'wallet_templates_v3']; // [CR-007] Add template key
                         for (const key of keys) {
                             const localData = localStorage.getItem(key);
                             if (localData) {
@@ -1466,6 +1525,7 @@
                         const dbTasks = await dbHelper.getItem('wallet_tasks_v3');
                         const dbSettings = await dbHelper.getItem('wallet_settings_v3');
                         const dbBgHistory = await dbHelper.getItem('wallet_bg_history_v3');
+                        const dbTemplates = await dbHelper.getItem('wallet_templates_v3'); // [CR-007] Load templates
 
                         if (dbTasks) setTasks(dbTasks);
                         if (dbSettings) {
@@ -1482,6 +1542,7 @@
                             setSettings(mergedSettings);
                         }
                         if (dbBgHistory) setBgHistory(dbBgHistory);
+                        if (dbTemplates) setTemplates(dbTemplates); // [CR-007] Set templates
                         setIsDataLoaded(true);
                     } catch (err) { console.error("Database initialization failed:", err); }
                 };
@@ -1491,6 +1552,8 @@
             useEffect(() => { if (isDataLoaded) dbHelper.setItem('wallet_tasks_v3', tasks); }, [tasks, isDataLoaded]);
             useEffect(() => { if (isDataLoaded) dbHelper.setItem('wallet_settings_v3', settings); }, [settings, isDataLoaded]);
             useEffect(() => { if (isDataLoaded) dbHelper.setItem('wallet_bg_history_v3', bgHistory); }, [bgHistory, isDataLoaded]);
+            // [CR-007] Persist templates
+            useEffect(() => { if (isDataLoaded) dbHelper.setItem('wallet_templates_v3', templates); }, [templates, isDataLoaded]);
 
             useEffect(() => {
                 const checkNotifications = async () => {
@@ -1591,7 +1654,7 @@
             const handleDeleteTag = (tag) => setTasks(prev => prev.map(t => ({ ...t, tags: (t.tags||[]).filter(tt => tt !== tag) })));
             
             const handleBackup = () => {
-                const backupData = { version: 3, timestamp: Date.now(), settings: settings, tasks: tasks };
+                const backupData = { version: 3, timestamp: Date.now(), settings: settings, tasks: tasks, templates: templates }; // [CR-007] Include templates
                 const blob = new Blob([JSON.stringify(backupData, null, 2)], {type: "application/json"});
                 const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `ticket_backup_idb_${new Date().toISOString().split('T')[0]}.json`; a.click();
             };
@@ -1621,6 +1684,12 @@
                         }
                     }));
                 }
+
+                // [CR-007] Import Templates
+                if (importPendingData.templates && Array.isArray(importPendingData.templates)) {
+                    if (mode === 'append') setTemplates(prev => [...prev, ...importPendingData.templates]);
+                    else setTemplates(importPendingData.templates);
+                }
                 
                 if (mode === 'append') setTasks(prev => [...prev, ...importedTasks]);
                 else setTasks(importedTasks);
@@ -1634,6 +1703,7 @@
                         await dbHelper.removeItem('wallet_tasks_v3');
                         await dbHelper.removeItem('wallet_settings_v3');
                         await dbHelper.removeItem('wallet_bg_history_v3');
+                        await dbHelper.removeItem('wallet_templates_v3'); // [CR-007] Remove templates
                         localStorage.removeItem('last_notify_date_v3');
                         window.location.reload();
                     }
@@ -1684,6 +1754,18 @@
                 });
             };
 
+            // [CR-007] 範本管理 Actions
+            const handleSaveTemplate = (data) => {
+                setTemplates(prev => [...prev, { id: 'tpl_' + Date.now(), ...data }]);
+                alert(`已儲存範本：${data.label}`);
+            };
+
+            const handleDeleteTemplate = (id) => {
+                if(window.confirm("確定刪除此範本？")) {
+                    setTemplates(prev => prev.filter(t => t.id !== id));
+                }
+            };
+
             if (!isDataLoaded) return <div className="fixed inset-0 bg-slate-50 flex flex-col items-center justify-center gap-4"><Loader2 className="w-12 h-12 text-sky-500 animate-spin" /><p className="text-slate-400 font-bold animate-pulse">正在載入資料庫...</p></div>;
             const currentConfig = settings.viewConfigs[view] || defaultViewConfig;
 
@@ -1707,11 +1789,11 @@
                             </div>
                         ) : <button onClick={() => setShowAddModal(true)} className="fixed bottom-10 right-5 w-16 h-16 bg-sky-500 text-white rounded-[24px] shadow-2xl flex items-center justify-center text-3xl active:scale-90 transition-transform z-40"><Plus size={32}/></button>}
 
-                        <AddTicketModal isOpen={showAddModal} onClose={() => setShowAddModal(false)} onAddBatch={handleAddBatch} allTags={allTags} specificViewKeywords={settings.specificViewKeywords} />
-                        <RedeemModal ticket={selectedTicket} onClose={() => setSelectedTicket(null)} onToggleComplete={handleToggleComplete} onDelete={handleDelete} onRestore={handleRestore} onUpdate={handleUpdate} allTags={allTags} specificViewKeywords={settings.specificViewKeywords} />
+                        <AddTicketModal isOpen={showAddModal} onClose={() => setShowAddModal(false)} onAddBatch={handleAddBatch} allTags={allTags} specificViewKeywords={settings.specificViewKeywords} templates={templates} onDeleteTemplate={handleDeleteTemplate} />
+                        <RedeemModal ticket={selectedTicket} onClose={() => setSelectedTicket(null)} onToggleComplete={handleToggleComplete} onDelete={handleDelete} onRestore={handleRestore} onUpdate={handleUpdate} allTags={allTags} specificViewKeywords={settings.specificViewKeywords} onSaveTemplate={handleSaveTemplate} />
                         <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} settings={settings} bgHistory={bgHistory} onSave={handleSaveSettings} onRemoveHistory={handleRemoveHistory} onAddToHistory={handleAddToHistory} />
                         <TagManagerModal isOpen={showTagManager} onClose={() => setShowTagManager(false)} tags={allTags} onDeleteTag={handleDeleteTag} />
-                        <BatchEditModal isOpen={showBatchModal} onClose={() => setShowBatchModal(false)} selectedCount={selectedIds.size} onBatchEdit={handleBatchEdit} allTags={allTags} />
+                        <BatchEditModal isOpen={showBatchModal} onClose={() => setShowBatchModal(false)} selectedCount={selectedIds.size} onBatchEdit={handleBatchEdit} allTags={allTags} templates={templates} onDeleteTemplate={handleDeleteTemplate} />
                         
                         <DataActionsModal isOpen={showDataModal} onClose={() => setShowDataModal(false)} onBackup={handleBackup} onImportClick={handleImportClick} onReset={handleFullReset} />
                         <ImportConfirmModal isOpen={!!importPendingData} data={importPendingData} onCancel={() => setImportPendingData(null)} onConfirm={executeImport} />
@@ -1725,4 +1807,5 @@
     </script>
 </body>
 </html>
+
 
