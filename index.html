@@ -113,8 +113,7 @@
             ImagePlus, Heart, HeartHandshake, Eye, EyeOff, Globe, BookOpen, Star, History, MousePointerClick, Layers,
             CalendarX2, CopyPlus, Lightbulb, Loader2, QrCode, SlidersHorizontal, ArrowUpDown, Image, CheckCheck, SendHorizontal, XCircle, Droplets,
             MoveVertical, BoxSelect, Monitor, Palette, Rows, LayoutGrid, ChevronRight, ChevronDown as ChevronDownIcon,
-            PanelTop, PaintBucket, Maximize, Move, Eye as PreviewIcon, Info, MapPin, DatabaseBackup, ArchiveRestore, Eraser, Settings2,
-            ImageMinus, Eraser as EraserIcon // Added for new icons
+            PanelTop, PaintBucket, Maximize, Move, Eye as PreviewIcon, Info, MapPin, DatabaseBackup, ArchiveRestore, Eraser, Settings2
         } from 'lucide-react';
 
         // --- 1. Core Logic (Helpers & DB) ---
@@ -226,8 +225,7 @@
             return results;
         };
 
-        // [CR-003] 修改 compressImage 支援 maxWidth 參數，用於生成縮圖
-        const compressImage = (fileOrUrl, maxWidth = 0) => {
+        const compressImage = (fileOrUrl) => {
             return new Promise((resolve, reject) => {
                 const img = new window.Image();
                 img.crossOrigin = "Anonymous";
@@ -235,7 +233,7 @@
                 let objectUrl = null;
 
                 img.onload = () => {
-                    if (img.width * img.height > 16000000 && maxWidth === 0) { // Only check strict limit for full res
+                    if (img.width * img.height > 16000000) {
                         if (objectUrl) URL.revokeObjectURL(objectUrl);
                         reject(new Error("Image resolution too high"));
                         return;
@@ -244,12 +242,6 @@
                     const canvas = document.createElement('canvas');
                     let width = img.width; 
                     let height = img.height;
-                    
-                    // [CR-003] Resize logic
-                    if (maxWidth > 0 && width > maxWidth) {
-                        height = Math.round(height * (maxWidth / width));
-                        width = maxWidth;
-                    }
                     
                     canvas.width = width; canvas.height = height;
                     const ctx = canvas.getContext('2d');
@@ -271,6 +263,27 @@
                     objectUrl = URL.createObjectURL(fileOrUrl);
                     img.src = objectUrl;
                 }
+            });
+        };
+
+        // [CR-006] 新增縮圖製作 Helper
+        const createThumbnail = (base64Image, maxWidth = 100) => {
+            return new Promise((resolve) => {
+                if (!base64Image) { resolve(null); return; }
+                const img = new window.Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    let scale = 1;
+                    if (img.width > maxWidth) scale = maxWidth / img.width;
+                    
+                    canvas.width = img.width * scale;
+                    canvas.height = img.height * scale;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    resolve(canvas.toDataURL('image/webp', 0.6));
+                };
+                img.onerror = () => resolve(null);
+                img.src = base64Image;
             });
         };
 
@@ -995,9 +1008,6 @@
             let overlayClass = '';
             let dynamicBorderStyle = {};
 
-            // [CR-007] 優先顯示 thumbnail，若無則顯示 image
-            const displayImage = ticket.thumbnail || ticket.image;
-
             if (isSelected) {
                 overlayClass = 'bg-sky-500/10 ring-2 ring-sky-500 border-sky-500';
             } else if (isExpiringWarning) {
@@ -1018,7 +1028,7 @@
                         )}
                         {compactShowImage && (
                             <div className="h-full aspect-square py-1 mr-1 flex-shrink-0">
-                                {displayImage ? <img src={displayImage} className={`w-full h-full object-cover rounded-md ${ticket.completed ? 'grayscale opacity-50' : ''}`} /> : <div className="w-full h-full bg-slate-100 rounded-md flex items-center justify-center border border-slate-200"><i className="fas fa-ticket-alt text-slate-300 text-xs"></i></div>}
+                                {ticket.image ? <img src={ticket.image} className={`w-full h-full object-cover rounded-md ${ticket.completed ? 'grayscale opacity-50' : ''}`} /> : <div className="w-full h-full bg-slate-100 rounded-md flex items-center justify-center border border-slate-200"><i className="fas fa-ticket-alt text-slate-300 text-xs"></i></div>}
                             </div>
                         )}
                         <div className="flex-1 min-w-0 flex flex-col justify-center">
@@ -1041,7 +1051,7 @@
                     {isSelectionMode && <div className={`absolute top-3 right-3 z-20 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-sky-500 border-sky-500' : 'border-slate-300 bg-white'}`}>{isSelected && <Check size={14} className="text-white"/>}</div>}
                     {isDuplicateWarning && <div className="absolute top-0 left-0 bg-red-500 text-white text-[9px] px-2 py-0.5 rounded-br-lg z-20 font-bold">重複序號</div>}
                     <div className="w-20 h-20 flex-shrink-0 rounded-2xl flex items-center justify-center overflow-hidden relative group-hover:scale-105 transition-transform">
-                        {displayImage ? <img src={displayImage} className={`w-full h-full object-cover ${ticket.completed ? 'grayscale opacity-50' : ''}`} /> : <i className="fas fa-ticket-alt text-slate-300 text-2xl"></i>}
+                        {ticket.image ? <img src={ticket.image} className={`w-full h-full object-cover ${ticket.completed ? 'grayscale opacity-50' : ''}`} /> : <i className="fas fa-ticket-alt text-slate-300 text-2xl"></i>}
                         {ticket.images && ticket.images.length > 1 && <div className="absolute bottom-0 right-0 bg-black/60 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-tl-lg">+{ticket.images.length-1}</div>}
                     </div>
                     <div className="flex-1 flex flex-col justify-between py-1 min-w-0">
@@ -1098,39 +1108,13 @@
             );
         };
 
-        const HistoryGalleryPicker = ({ history, onSelect }) => {
-            const [isOpen, setIsOpen] = useState(false);
-            if (!history || history.length === 0) return null;
-            return (
-                <>
-                    <button onClick={() => setIsOpen(!isOpen)} className="px-3 py-1 bg-slate-100 text-slate-500 text-[10px] font-bold rounded-lg hover:bg-slate-200 whitespace-nowrap flex items-center gap-1">
-                        <History size={12}/> 歷史庫
-                    </button>
-                    {isOpen && (
-                        <div className="absolute top-full left-0 mt-2 w-64 bg-white border border-slate-200 rounded-xl shadow-xl z-30 p-2">
-                            <div className="text-[10px] font-bold text-slate-400 mb-2 px-1">點擊以選取</div>
-                            <div className="grid grid-cols-4 gap-2 max-h-40 overflow-y-auto no-scrollbar">
-                                {history.map((img, idx) => (
-                                    <button key={idx} onClick={() => { onSelect(img); setIsOpen(false); }} className="aspect-square bg-slate-50 rounded-lg overflow-hidden border border-slate-100 hover:ring-2 hover:ring-sky-500">
-                                        <img src={img} className="w-full h-full object-cover" />
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                </>
-            );
-        };
-
-        const RedeemModal = ({ ticket, onClose, onToggleComplete, onDelete, onRestore, onUpdate, allTags, specificViewKeywords, nameHistory, imageHistory }) => {
+        const RedeemModal = ({ ticket, onClose, onToggleComplete, onDelete, onRestore, onUpdate, allTags, specificViewKeywords }) => {
             if (!ticket) return null;
             const [isEditing, setIsEditing] = useState(false);
             const [editName, setEditName] = useState(ticket.productName);
             const [editExpiry, setEditExpiry] = useState(ticket.expiry);
             const [editTags, setEditTags] = useState(ticket.tags || []);
             const [editImage, setEditImage] = useState(ticket.image || '');
-            // [CR-007] 新增縮圖編輯狀態
-            const [editThumbnail, setEditThumbnail] = useState(ticket.thumbnail || '');
             
             // [CR-003] 確保當 ticket Prop 變更時，強制同步編輯狀態
             useEffect(() => {
@@ -1139,7 +1123,6 @@
                     setEditExpiry(ticket.expiry);
                     setEditTags(ticket.tags || []);
                     setEditImage(ticket.image || '');
-                    setEditThumbnail(ticket.thumbnail || '');
                 }
             }, [ticket]);
 
@@ -1154,10 +1137,8 @@
 
             const handleSave = () => {
                 onUpdate({
-                    ...ticket, productName: editName, expiry: editExpiry ? editExpiry.replace(/-/g, '/') : '',
-                    tags: editTags, 
-                    image: editImage,
-                    thumbnail: editThumbnail, // [CR-007] Save thumbnail
+                    ...ticket, productName: editName, expiry: editExpiry.replace(/-/g, '/'),
+                    tags: editTags, image: editImage,
                     images: editImage ? (ticket.images && ticket.images.includes(editImage) ? ticket.images : [editImage, ...(ticket.images || [])]) : ticket.images
                 });
                 setIsEditing(false);
@@ -1173,53 +1154,16 @@
                         <div className="p-4 sm:p-5 flex flex-col h-full">
                             <div className="text-center shrink-0">
                                 {isEditing ? (
-                                    <>
-                                        <input list="name-history-list" className="text-lg font-black text-center w-full border-b border-sky-200 pb-2 mb-2 text-slate-800 focus:outline-none" value={editName} onChange={e=>setEditName(e.target.value)} placeholder="輸入或選擇名稱" />
-                                        <datalist id="name-history-list">
-                                            {(nameHistory || []).map((n, i) => <option key={i} value={n} />)}
-                                        </datalist>
-                                    </>
+                                    <input className="text-lg font-black text-center w-full border-b border-sky-200 pb-2 mb-2 text-slate-800 focus:outline-none" value={editName} onChange={e=>setEditName(e.target.value)} />
                                 ) : (
                                     !isMomoMode && <h3 className="text-base font-black text-slate-800 break-words leading-tight px-4 mb-2">{ticket.productName}</h3>
                                 )}
                                 {isEditing && (
                                     <div className="mt-2 text-left space-y-3 bg-slate-50 p-4 rounded-2xl">
-                                        {/* [CR-007] 縮圖編輯區 */}
-                                        <div>
-                                            <div className="flex justify-between items-center">
-                                                <label className="text-[10px] font-bold text-slate-400 uppercase">票券縮圖 (列表用)</label>
-                                                <div className="relative"><HistoryGalleryPicker history={imageHistory} onSelect={setEditThumbnail}/></div>
-                                            </div>
-                                            <div className="flex items-center gap-3 mt-1">
-                                                {editThumbnail ? <img src={editThumbnail} className="w-12 h-12 object-cover rounded-lg border border-slate-200"/> : <div className="w-12 h-12 bg-white border border-dashed border-slate-300 rounded-lg flex items-center justify-center"><ImageMinus size={16} className="text-slate-300"/></div>}
-                                                <label className="px-3 py-1 bg-sky-100 text-sky-600 text-[10px] font-bold rounded-md cursor-pointer">
-                                                    上傳 <input type="file" accept="image/*" onChange={async e => {
-                                                        const file = e.target.files[0];
-                                                        if(file) { const base64 = await compressImage(file, 200); setEditThumbnail(base64); }
-                                                    }} className="hidden"/>
-                                                </label>
-                                                {editThumbnail && <button onClick={() => setEditThumbnail('')} className="text-red-400 p-1"><X size={14}/></button>}
-                                            </div>
-                                        </div>
-                                        
-                                        {/* [CR-007] 原圖編輯區 */}
-                                        <div>
-                                            <div className="flex justify-between items-center">
-                                                <label className="text-[10px] font-bold text-slate-400 uppercase">兌換原圖 (完整顯示)</label>
-                                                <div className="relative"><HistoryGalleryPicker history={imageHistory} onSelect={setEditImage}/></div>
-                                            </div>
-                                            <div className="flex items-center gap-3 mt-1">
-                                                {editImage ? <img src={editImage} className="w-12 h-12 object-cover rounded-lg border border-slate-200"/> : <div className="w-12 h-12 bg-white border border-dashed border-slate-300 rounded-lg flex items-center justify-center"><ImageIcon size={16} className="text-slate-300"/></div>}
-                                                <label className="px-3 py-1 bg-sky-100 text-sky-600 text-[10px] font-bold rounded-md cursor-pointer">
-                                                    上傳 <input type="file" accept="image/*" onChange={async e => {
-                                                        const file = e.target.files[0];
-                                                        if(file) { const base64 = await compressImage(file); setEditImage(base64); }
-                                                    }} className="hidden"/>
-                                                </label>
-                                                {editImage && <button onClick={() => setEditImage('')} className="text-red-400 p-1"><X size={14}/></button>}
-                                            </div>
-                                        </div>
-
+                                        <div><label className="text-[10px] font-bold text-slate-400 uppercase">封面</label><div className="flex items-center gap-3 mt-1">{editImage ? <img src={editImage} className="w-12 h-12 object-cover rounded-lg border border-slate-200"/> : <div className="w-12 h-12 bg-white border border-dashed border-slate-300 rounded-lg flex items-center justify-center"><ImageIcon size={16} className="text-slate-300"/></div>}<label className="px-3 py-1 bg-sky-100 text-sky-600 text-[10px] font-bold rounded-md cursor-pointer">上傳 <input type="file" accept="image/*" onChange={async e => {
+                                                const file = e.target.files[0];
+                                                if(file) { const base64 = await compressImage(file); setEditImage(base64); }
+                                            }} className="hidden"/></label></div></div>
                                         <div>
                                             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">兌換期限</label>
                                             <input 
@@ -1317,7 +1261,7 @@
             );
         };
 
-        const AddTicketModal = ({ isOpen, onClose, onAddBatch, allTags, specificViewKeywords, nameHistory, imageHistory }) => {
+        const AddTicketModal = ({ isOpen, onClose, onAddBatch, allTags, specificViewKeywords, ticketHistory, onDeleteHistory }) => {
             if (!isOpen) return null;
             // [CR-005] 鎖定初始狀態為 manual，並在 UI 隱藏 smart 模式選項
             const [activeTab, setActiveTab] = useState('manual'); 
@@ -1326,6 +1270,7 @@
             const [manualData, setManualData] = useState({ name: '', serial: '', expiry: '', note: '' });
             const [manualTags, setManualTags] = useState([]);
             const [images, setImages] = useState([]);
+            const [urlInput, setUrlInput] = useState('');
 
             const handleSmartSubmit = async () => {
                 if (!pasteVal.trim()) return;
@@ -1337,23 +1282,12 @@
                 } catch (e) { alert("處理失敗"); } finally { setLoading(false); }
             };
 
-            const handleManualSubmit = () => {
+            const handleManualSubmit = async () => {
                 if (!manualData.name) { alert("請輸入名稱"); return; }
-                onAddBatch([{ 
-                    id: Date.now(), 
-                    productName: manualData.name, 
-                    serial: manualData.serial, 
-                    expiry: manualData.expiry ? manualData.expiry.replace(/-/g, '/') : '', 
-                    note: manualData.note, 
-                    images: images, 
-                    image: images[0] || '',
-                    // [CR-007] When adding new, use image as thumbnail as well or leave empty (will fallback)
-                    // Let's set thumbnail same as image for simplicity unless resized separately, but `compressImage` already resizes somewhat. 
-                    // To follow CR-007 strictly we can leave it or set it. Let's set it to ensure consistency if logic changes.
-                    thumbnail: images[0] || '',
-                    tags: manualTags, 
-                    completed: false, isDeleted: false, createdAt: Date.now() 
-                }]);
+                const newTicket = { id: Date.now(), productName: manualData.name, serial: manualData.serial, expiry: manualData.expiry.replace(/-/g, '/'), note: manualData.note, images: images, image: images[0] || '', tags: manualTags, completed: false, isDeleted: false, createdAt: Date.now() };
+                
+                // [CR-006] 更新歷史邏輯，傳遞原圖與名稱，交由 App 層處理縮圖與儲存
+                onAddBatch([newTicket], true); // true flag to indicate manual add with history update intention
                 onClose();
             };
 
@@ -1363,6 +1297,26 @@
                     try { const base64 = await compressImage(file); setImages([base64]); } catch(err) { alert("處理圖片時發生錯誤：" + err.message); }
                 }
             };
+            
+            // [CR-006] 網址上傳
+            const handleUrlLoad = async () => {
+                if(!urlInput) return;
+                try {
+                    setLoading(true);
+                    const base64 = await compressImage(urlInput); 
+                    setImages([base64]); 
+                    setUrlInput('');
+                } catch(e) {
+                    alert("無法讀取此圖片網址 (可能受限於網站 CORS 安全政策)，請嘗試下載後上傳。");
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const handleHistorySelect = (item) => {
+                setManualData(prev => ({ ...prev, name: item.name }));
+                if (item.thumb) setImages([item.thumb]); // Use thumbnail as placeholder or actual image if low res
+            };
 
             return (
                 <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-end sm:items-center justify-center animate-fade-in backdrop-blur-sm" onClick={onClose}>
@@ -1371,22 +1325,42 @@
                         {/* [CR-005] 隱藏模式切換 Tab 與智慧解析介面，僅保留手動輸入 */}
                         {activeTab === 'manual' && (
                             <div className="space-y-3">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-20 h-20 bg-slate-50 border border-dashed border-slate-300 rounded-2xl flex items-center justify-center relative overflow-hidden shrink-0">
-                                        {images.length > 0 ? <img src={images[0]} className="w-full h-full object-cover"/> : <ImageIcon className="text-slate-300"/>}
-                                        <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" onChange={handleImageUpload}/>
-                                    </div>
-                                    <div className="flex-1">
-                                        <div className="text-xs font-bold text-slate-400 mb-1">上傳票券照片 (選填)</div>
-                                        {/* [CR-006] 歷史庫選擇 */}
-                                        <div className="relative">
-                                            <HistoryGalleryPicker history={imageHistory} onSelect={(img) => setImages([img])} />
+                                <div className="flex gap-2">
+                                     <div className="w-20 h-20 shrink-0 bg-slate-50 border border-dashed border-slate-300 rounded-2xl flex items-center justify-center relative overflow-hidden group">
+                                         {images.length > 0 ? <img src={images[0]} className="w-full h-full object-cover"/> : <ImageIcon className="text-slate-300"/>}
+                                         <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" onChange={handleImageUpload}/>
+                                         {loading && <div className="absolute inset-0 bg-white/50 flex items-center justify-center"><Loader2 className="animate-spin text-sky-500"/></div>}
+                                     </div>
+                                     <div className="flex-1 space-y-2">
+                                         <div className="text-xs font-bold text-slate-400">票券圖片</div>
+                                         <div className="flex gap-2">
+                                             <input value={urlInput} onChange={e=>setUrlInput(e.target.value)} placeholder="或貼上圖片網址..." className="flex-1 p-2 bg-slate-50 rounded-xl text-xs outline-none border-none"/>
+                                             <button onClick={handleUrlLoad} disabled={!urlInput} className="px-3 bg-slate-100 text-slate-500 rounded-xl text-xs font-bold hover:bg-sky-100 hover:text-sky-600"><Download size={14}/></button>
+                                         </div>
+                                     </div>
+                                </div>
+                                
+                                {/* [CR-006] 歷史紀錄區 */}
+                                {ticketHistory && ticketHistory.length > 0 && (
+                                    <div className="py-2">
+                                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">常用票券</div>
+                                        <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2">
+                                            {ticketHistory.map((item, idx) => (
+                                                <div key={idx} className="relative group shrink-0">
+                                                    <button onClick={() => handleHistorySelect(item)} className="flex flex-col items-center gap-1 w-16">
+                                                        <div className="w-12 h-12 rounded-xl bg-slate-50 border border-slate-100 overflow-hidden">
+                                                            {item.thumb ? <img src={item.thumb} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><Tag size={12} className="text-slate-300"/></div>}
+                                                        </div>
+                                                        <span className="text-[9px] font-bold text-slate-500 w-full text-center truncate px-1">{item.name}</span>
+                                                    </button>
+                                                    <button onClick={(e) => { e.stopPropagation(); onDeleteHistory(item.name); }} className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"><X size={8}/></button>
+                                                </div>
+                                            ))}
                                         </div>
                                     </div>
-                                </div>
-                                <input list="add-name-history" className="w-full p-3.5 bg-slate-50 rounded-xl outline-none font-bold" placeholder="票券名稱 (必填)" value={manualData.name} onChange={e=>setManualData({...manualData, name: e.target.value})}/>
-                                <datalist id="add-name-history">{(nameHistory || []).map((n, i) => <option key={i} value={n}/>)}</datalist>
+                                )}
 
+                                <input className="w-full p-3.5 bg-slate-50 rounded-xl outline-none font-bold" placeholder="票券名稱 (必填)" value={manualData.name} onChange={e=>setManualData({...manualData, name: e.target.value})}/>
                                 <TagSelectInput allTags={allTags} selectedTags={manualTags} onTagsChange={setManualTags} extraSuggestions={specificViewKeywords} />
                                 <input className="w-full p-3.5 bg-slate-50 rounded-xl outline-none font-mono text-sm" placeholder="序號/代碼" value={manualData.serial} onChange={e=>setManualData({...manualData, serial: e.target.value})}/>
                                 <div className="space-y-1">
@@ -1430,93 +1404,19 @@
             );
         };
         
-        // [CR-001, CR-002, CR-003, CR-004] 重構 BatchEditModal 以支援多種批量編輯
-        const BatchEditModal = ({ isOpen, onClose, selectedCount, onBatchEdit, allTags, nameHistory, imageHistory }) => {
+        const BatchEditModal = ({ isOpen, onClose, selectedCount, onAddTag, allTags }) => {
              const [tagsToAdd, setTagsToAdd] = useState([]);
-             const [shouldClearTags, setShouldClearTags] = useState(false);
-             const [batchName, setBatchName] = useState('');
-             const [batchExpiry, setBatchExpiry] = useState('');
-             const [batchThumbnail, setBatchThumbnail] = useState('');
-
-             useEffect(() => {
-                 if (isOpen) {
-                     setTagsToAdd([]);
-                     setShouldClearTags(false);
-                     setBatchName('');
-                     setBatchExpiry('');
-                     setBatchThumbnail('');
-                 }
-             }, [isOpen]);
-
              if(!isOpen) return null;
-             
-             const handleConfirm = () => { 
-                 onBatchEdit({
-                     name: batchName,
-                     expiry: batchExpiry,
-                     thumbnail: batchThumbnail,
-                     addTags: tagsToAdd,
-                     clearTags: shouldClearTags
-                 }); 
-                 onClose(); 
-             };
-
+             const handleConfirm = () => { onAddTag(tagsToAdd); onClose(); };
              return (
                 <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-end sm:items-center justify-center animate-fade-in" onClick={onClose}>
-                     <div className="bg-white w-full sm:w-[450px] sm:rounded-3xl rounded-t-[32px] p-6 shadow-2xl max-h-[90vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
+                     <div className="bg-white w-full sm:w-[400px] sm:rounded-3xl rounded-t-[32px] p-6 shadow-2xl" onClick={e=>e.stopPropagation()}>
                         <h2 className="text-xl font-black mb-1 text-slate-800">批量編輯</h2>
-                        <p className="text-xs font-bold text-slate-400 mb-4">已選取 {selectedCount} 張票券 (空白欄位將維持原樣)</p>
-                        
-                        <div className="space-y-5">
-                            {/* 名稱 */}
-                            <div>
-                                <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">統一修改名稱</label>
-                                <input list="batch-name-history" className="w-full p-3 bg-slate-50 rounded-xl outline-none font-bold text-sm" placeholder="輸入名稱以覆蓋所有選取項目" value={batchName} onChange={e => setBatchName(e.target.value)} />
-                                <datalist id="batch-name-history">{(nameHistory || []).map((n, i) => <option key={i} value={n}/>)}</datalist>
-                            </div>
-
-                            {/* 縮圖 */}
-                            <div>
-                                <label className="text-xs font-bold text-slate-500 uppercase mb-2 flex justify-between">
-                                    <span>統一修改縮圖</span>
-                                    <div className="relative"><HistoryGalleryPicker history={imageHistory} onSelect={setBatchThumbnail}/></div>
-                                </label>
-                                <div className="flex items-center gap-3">
-                                    <div className="w-16 h-16 bg-slate-50 border border-dashed border-slate-300 rounded-xl flex items-center justify-center relative overflow-hidden shrink-0">
-                                        {batchThumbnail ? <img src={batchThumbnail} className="w-full h-full object-cover"/> : <ImageIcon className="text-slate-300"/>}
-                                        <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" onChange={async e => {
-                                            const file = e.target.files[0];
-                                            if(file) { const base64 = await compressImage(file, 200); setBatchThumbnail(base64); }
-                                        }}/>
-                                    </div>
-                                    <div className="text-xs text-slate-400">上傳圖片或從歷史庫選擇<br/>將套用於所有選取票券</div>
-                                </div>
-                            </div>
-
-                            {/* 期限 */}
-                            <div>
-                                <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">統一修改期限</label>
-                                <input type="date" className="w-full p-3 bg-slate-50 rounded-xl outline-none font-bold text-sm text-slate-600" value={batchExpiry} onChange={e => setBatchExpiry(e.target.value)} />
-                            </div>
-
-                            {/* 標籤 */}
-                            <div className="bg-slate-50 p-4 rounded-xl space-y-4">
-                                <label className="flex items-center gap-3 cursor-pointer">
-                                    <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${shouldClearTags ? 'bg-red-500 border-red-500' : 'border-slate-300 bg-white'}`}>
-                                        {shouldClearTags && <Check size={14} className="text-white"/>}
-                                    </div>
-                                    <input type="checkbox" className="hidden" checked={shouldClearTags} onChange={e => setShouldClearTags(e.target.checked)}/>
-                                    <div className="text-sm font-bold text-slate-700 flex items-center gap-2"><EraserIcon size={14}/> 清除原有所有標籤</div>
-                                </label>
-                                
-                                <div>
-                                    <label className="text-xs font-bold text-slate-400 uppercase mb-2 block">新增標籤</label>
-                                    <TagSelectInput allTags={allTags} selectedTags={tagsToAdd} onTagsChange={setTagsToAdd} />
-                                </div>
-                            </div>
+                        <p className="text-xs font-bold text-slate-400 mb-4">已選取 {selectedCount} 張票券</p>
+                        <div className="space-y-4">
+                            <div><label className="text-xs font-bold text-slate-500 uppercase mb-2 block">新增標籤</label><TagSelectInput allTags={allTags} selectedTags={tagsToAdd} onTagsChange={setTagsToAdd} /></div>
                         </div>
-
-                        <div className="flex gap-3 mt-6"><button onClick={onClose} className="flex-1 py-3 bg-slate-100 font-bold rounded-2xl text-slate-500">取消</button><button onClick={handleConfirm} className="flex-1 py-3 bg-sky-500 font-bold rounded-2xl text-white shadow-lg shadow-sky-200 hover:bg-sky-600 transition-colors">確認修改</button></div>
+                        <div className="flex gap-3 mt-6"><button onClick={onClose} className="flex-1 py-3 bg-slate-100 font-bold rounded-2xl text-slate-500">取消</button><button onClick={handleConfirm} className="flex-1 py-3 bg-sky-500 font-bold rounded-2xl text-white shadow-lg shadow-sky-200 hover:bg-sky-600 transition-colors">確認儲存</button></div>
                      </div>
                 </div>
              );
@@ -1543,9 +1443,6 @@
                 tgToken: '', tgChatId: '', notifyDays: 7, appTitle: '我的票夾',
                 specificViewKeywords: ['MOMO', '85度C'], 
                 bgConfigMap: {}, 
-                // [CR-005, CR-006] Initialize history arrays
-                nameHistory: [],
-                ticketImageHistory: [],
                 viewConfigs: {
                     active: { ...defaultViewConfig },
                     completed: { ...defaultViewConfig },
@@ -1553,6 +1450,10 @@
                 }
             });
             const [bgHistory, setBgHistory] = useState([]);
+            
+            // [CR-006] 票券歷史 State
+            const [ticketHistory, setTicketHistory] = useState([]);
+            
             const [showSettings, setShowSettings] = useState(false);
             const [showTagManager, setShowTagManager] = useState(false);
             const [isDataLoaded, setIsDataLoaded] = useState(false);
@@ -1580,16 +1481,15 @@
                         const dbTasks = await dbHelper.getItem('wallet_tasks_v3');
                         const dbSettings = await dbHelper.getItem('wallet_settings_v3');
                         const dbBgHistory = await dbHelper.getItem('wallet_bg_history_v3');
+                        // [CR-006] 讀取歷史
+                        const dbTicketHistory = await dbHelper.getItem('wallet_ticket_history_v3');
 
                         if (dbTasks) setTasks(dbTasks);
                         if (dbSettings) {
                             const mergedSettings = {
                                 ...settings, ...dbSettings,
                                 bgConfigMap: dbSettings.bgConfigMap || {}, 
-                                specificViewKeywords: dbSettings.specificViewKeywords || ['MOMO', '85度C'],
-                                // Ensure arrays exist
-                                nameHistory: dbSettings.nameHistory || [],
-                                ticketImageHistory: dbSettings.ticketImageHistory || [],
+                                specificViewKeywords: dbSettings.specificViewKeywords || ['MOMO', '85度C'], 
                                 viewConfigs: {
                                     active: migrateConfig(dbSettings.viewConfigs?.active),
                                     completed: migrateConfig(dbSettings.viewConfigs?.completed),
@@ -1599,6 +1499,7 @@
                             setSettings(mergedSettings);
                         }
                         if (dbBgHistory) setBgHistory(dbBgHistory);
+                        if (dbTicketHistory) setTicketHistory(dbTicketHistory);
                         setIsDataLoaded(true);
                     } catch (err) { console.error("Database initialization failed:", err); }
                 };
@@ -1608,6 +1509,8 @@
             useEffect(() => { if (isDataLoaded) dbHelper.setItem('wallet_tasks_v3', tasks); }, [tasks, isDataLoaded]);
             useEffect(() => { if (isDataLoaded) dbHelper.setItem('wallet_settings_v3', settings); }, [settings, isDataLoaded]);
             useEffect(() => { if (isDataLoaded) dbHelper.setItem('wallet_bg_history_v3', bgHistory); }, [bgHistory, isDataLoaded]);
+            // [CR-006] 儲存歷史
+            useEffect(() => { if (isDataLoaded) dbHelper.setItem('wallet_ticket_history_v3', ticketHistory); }, [ticketHistory, isDataLoaded]);
 
             useEffect(() => {
                 const checkNotifications = async () => {
@@ -1676,39 +1579,33 @@
                 return result;
             }, [tasks, view, activeTag, searchQuery, sortType, duplicateSerials, settings.notifyDays]);
 
-            // [CR-005, CR-006] Update History Helpers
-            const updateNameHistory = (name) => {
-                if(!name) return;
-                setSettings(prev => {
-                    const list = [name, ...(prev.nameHistory || [])];
-                    const unique = [...new Set(list)].slice(0, 30);
-                    return { ...prev, nameHistory: unique };
-                });
-            };
-            const updateTicketImageHistory = (img) => {
-                if(!img) return;
-                setSettings(prev => {
-                    const list = [img, ...(prev.ticketImageHistory || [])];
-                    const unique = [...new Set(list)].slice(0, 20);
-                    return { ...prev, ticketImageHistory: unique };
-                });
-            };
-
-            const handleAddBatch = (newItems) => {
+            const handleAddBatch = async (newItems, updateHistory = false) => {
                 setTasks(prev => [...newItems, ...prev]);
-                // Update history from new items
-                newItems.forEach(item => {
-                    if (item.productName) updateNameHistory(item.productName);
-                    if (item.image) updateTicketImageHistory(item.image);
-                });
+                
+                // [CR-006] 自動更新歷史邏輯
+                if (updateHistory && newItems.length === 1) {
+                    const item = newItems[0];
+                    if (item.productName) {
+                        let thumb = '';
+                        if (item.image) {
+                            thumb = await createThumbnail(item.image, 100);
+                        }
+                        setTicketHistory(prev => {
+                            const filtered = prev.filter(p => p.name !== item.productName);
+                            return [{ name: item.productName, thumb: thumb, lastUsed: Date.now() }, ...filtered].slice(0, 20);
+                        });
+                    }
+                }
             };
 
-            const handleUpdate = (updatedTicket) => {
-                setTasks(prev => prev.map(t => t.id === updatedTicket.id ? updatedTicket : t));
-                if (updatedTicket.productName) updateNameHistory(updatedTicket.productName);
-                if (updatedTicket.thumbnail) updateTicketImageHistory(updatedTicket.thumbnail);
-                if (updatedTicket.image) updateTicketImageHistory(updatedTicket.image);
+            // [CR-006] 刪除歷史邏輯
+            const handleDeleteHistory = (name) => {
+                if(confirm(`確定要移除「${name}」的紀錄嗎？`)) {
+                    setTicketHistory(prev => prev.filter(item => item.name !== name));
+                }
             };
+
+            const handleUpdate = (updatedTicket) => setTasks(prev => prev.map(t => t.id === updatedTicket.id ? updatedTicket : t));
             
             const handleToggleComplete = async (ticket) => {
                 const newStatus = !ticket.completed;
@@ -1762,9 +1659,6 @@
                     setSettings(prev => ({
                         ...prev, ...impSet,
                         specificViewKeywords: impSet.specificViewKeywords || ['MOMO', '85度C'],
-                        // Merge history arrays
-                        nameHistory: [...new Set([...(prev.nameHistory||[]), ...(impSet.nameHistory||[])])].slice(0, 30),
-                        ticketImageHistory: [...new Set([...(prev.ticketImageHistory||[]), ...(impSet.ticketImageHistory||[])])].slice(0, 20),
                         viewConfigs: {
                             active: migrateConfig(impSet.viewConfigs?.active),
                             completed: migrateConfig(impSet.viewConfigs?.completed),
@@ -1785,6 +1679,7 @@
                         await dbHelper.removeItem('wallet_tasks_v3');
                         await dbHelper.removeItem('wallet_settings_v3');
                         await dbHelper.removeItem('wallet_bg_history_v3');
+                        await dbHelper.removeItem('wallet_ticket_history_v3');
                         localStorage.removeItem('last_notify_date_v3');
                         window.location.reload();
                     }
@@ -1793,33 +1688,7 @@
             
             const handleSelect = (id) => { const s = new Set(selectedIds); if(s.has(id)) s.delete(id); else s.add(id); setSelectedIds(s); };
             const handleSelectAll = () => setSelectedIds(selectedIds.size === filteredTasks.length ? new Set() : new Set(filteredTasks.map(t => t.id)));
-            
-            // [CR-001, CR-002, CR-003, CR-004] 批量編輯邏輯實作
-            const handleBatchEdit = ({ name, expiry, thumbnail, addTags, clearTags }) => {
-                setTasks(prev => prev.map(t => {
-                    if (!selectedIds.has(t.id)) return t;
-                    let updates = {};
-                    if (name) updates.productName = name;
-                    if (expiry) updates.expiry = expiry.replace(/-/g, '/');
-                    if (thumbnail) updates.thumbnail = thumbnail;
-                    
-                    let newTags = t.tags || [];
-                    if (clearTags) newTags = [];
-                    if (addTags && addTags.length > 0) {
-                         newTags = [...new Set([...newTags, ...addTags])];
-                    }
-                    updates.tags = newTags;
-                    
-                    return { ...t, ...updates };
-                }));
-                // Update Histories
-                if(name) updateNameHistory(name);
-                if(thumbnail) updateTicketImageHistory(thumbnail);
-                
-                setSelectedIds(new Set()); 
-                setIsSelectionMode(false);
-            };
-
+            const handleBatchAddTag = (tagsToAdd) => { setTasks(prev => prev.map(t => selectedIds.has(t.id) ? { ...t, tags: Array.from(new Set([...(t.tags || []), ...tagsToAdd])) } : t)); setSelectedIds(new Set()); setIsSelectionMode(false); };
             const handleSaveSettings = (newSettings) => {
                 setSettings(newSettings);
                 const imagesToAdd = [newSettings.viewConfigs.active.backgroundImage, newSettings.viewConfigs.completed.backgroundImage, newSettings.viewConfigs.deleted.backgroundImage].filter(Boolean);
@@ -1859,16 +1728,16 @@
                         
                         {isSelectionMode ? (
                             <div className="fixed bottom-10 left-1/2 -translate-x-1/2 flex gap-3 z-40 animate-slide-up">
-                                {selectedIds.size > 0 && <><button onClick={() => setShowBatchModal(true)} className="bg-sky-500 hover:bg-sky-600 text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-sky-200 flex items-center gap-2"><Tag size={18}/> 批量編輯</button><button onClick={() => { if(confirm(`確定刪除 ${selectedIds.size} 項目？`)) { if(view === 'deleted') setTasks(prev => prev.filter(t => !selectedIds.has(t.id))); else { const now = Date.now(); setTasks(prev => prev.map(t => selectedIds.has(t.id) ? { ...t, isDeleted: true, deletedAt: now } : t)); } setSelectedIds(new Set()); setIsSelectionMode(false); } }} className="bg-white text-red-500 border border-red-100 px-4 py-3 rounded-2xl font-bold shadow-lg flex items-center gap-2 hover:bg-red-50"><Trash2 size={18}/></button></>}
+                                {selectedIds.size > 0 && <><button onClick={() => setShowBatchModal(true)} className="bg-sky-500 hover:bg-sky-600 text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-sky-200 flex items-center gap-2"><Tag size={18}/> 批量標籤</button><button onClick={() => { if(confirm(`確定刪除 ${selectedIds.size} 項目？`)) { if(view === 'deleted') setTasks(prev => prev.filter(t => !selectedIds.has(t.id))); else { const now = Date.now(); setTasks(prev => prev.map(t => selectedIds.has(t.id) ? { ...t, isDeleted: true, deletedAt: now } : t)); } setSelectedIds(new Set()); setIsSelectionMode(false); } }} className="bg-white text-red-500 border border-red-100 px-4 py-3 rounded-2xl font-bold shadow-lg flex items-center gap-2 hover:bg-red-50"><Trash2 size={18}/></button></>}
                                 <button onClick={() => {setIsSelectionMode(false); setSelectedIds(new Set());}} className="bg-slate-800 text-white px-4 py-3 rounded-2xl font-bold shadow-lg">取消</button>
                             </div>
                         ) : <button onClick={() => setShowAddModal(true)} className="fixed bottom-10 right-5 w-16 h-16 bg-sky-500 text-white rounded-[24px] shadow-2xl flex items-center justify-center text-3xl active:scale-90 transition-transform z-40"><Plus size={32}/></button>}
 
-                        <AddTicketModal isOpen={showAddModal} onClose={() => setShowAddModal(false)} onAddBatch={handleAddBatch} allTags={allTags} specificViewKeywords={settings.specificViewKeywords} nameHistory={settings.nameHistory} imageHistory={settings.ticketImageHistory} />
-                        <RedeemModal ticket={selectedTicket} onClose={() => setSelectedTicket(null)} onToggleComplete={handleToggleComplete} onDelete={handleDelete} onRestore={handleRestore} onUpdate={handleUpdate} allTags={allTags} specificViewKeywords={settings.specificViewKeywords} nameHistory={settings.nameHistory} imageHistory={settings.ticketImageHistory} />
+                        <AddTicketModal isOpen={showAddModal} onClose={() => setShowAddModal(false)} onAddBatch={handleAddBatch} allTags={allTags} specificViewKeywords={settings.specificViewKeywords} ticketHistory={ticketHistory} onDeleteHistory={handleDeleteHistory} />
+                        <RedeemModal ticket={selectedTicket} onClose={() => setSelectedTicket(null)} onToggleComplete={handleToggleComplete} onDelete={handleDelete} onRestore={handleRestore} onUpdate={handleUpdate} allTags={allTags} specificViewKeywords={settings.specificViewKeywords} />
                         <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} settings={settings} bgHistory={bgHistory} onSave={handleSaveSettings} onRemoveHistory={handleRemoveHistory} onAddToHistory={handleAddToHistory} />
                         <TagManagerModal isOpen={showTagManager} onClose={() => setShowTagManager(false)} tags={allTags} onDeleteTag={handleDeleteTag} />
-                        <BatchEditModal isOpen={showBatchModal} onClose={() => setShowBatchModal(false)} selectedCount={selectedIds.size} onBatchEdit={handleBatchEdit} allTags={allTags} nameHistory={settings.nameHistory} imageHistory={settings.ticketImageHistory} />
+                        <BatchEditModal isOpen={showBatchModal} onClose={() => setShowBatchModal(false)} selectedCount={selectedIds.size} onAddTag={handleBatchAddTag} allTags={allTags} />
                         
                         <DataActionsModal isOpen={showDataModal} onClose={() => setShowDataModal(false)} onBackup={handleBackup} onImportClick={handleImportClick} onReset={handleFullReset} />
                         <ImportConfirmModal isOpen={!!importPendingData} data={importPendingData} onCancel={() => setImportPendingData(null)} onConfirm={executeImport} />
