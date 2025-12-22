@@ -266,27 +266,6 @@
             });
         };
 
-        // [CR-006] 新增縮圖製作 Helper
-        const createThumbnail = (base64Image, maxWidth = 100) => {
-            return new Promise((resolve) => {
-                if (!base64Image) { resolve(null); return; }
-                const img = new window.Image();
-                img.onload = () => {
-                    const canvas = document.createElement('canvas');
-                    let scale = 1;
-                    if (img.width > maxWidth) scale = maxWidth / img.width;
-                    
-                    canvas.width = img.width * scale;
-                    canvas.height = img.height * scale;
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                    resolve(canvas.toDataURL('image/webp', 0.6));
-                };
-                img.onerror = () => resolve(null);
-                img.src = base64Image;
-            });
-        };
-
         const checkIsExpiringSoon = (expiryStr, thresholdDays = 7) => {
             if (!expiryStr) return false;
             const normalizedDate = expiryStr.replace(/[\.\-]/g, '/');
@@ -1261,7 +1240,7 @@
             );
         };
 
-        const AddTicketModal = ({ isOpen, onClose, onAddBatch, allTags, specificViewKeywords, ticketHistory, onDeleteHistory }) => {
+        const AddTicketModal = ({ isOpen, onClose, onAddBatch, allTags, specificViewKeywords }) => {
             if (!isOpen) return null;
             // [CR-005] 鎖定初始狀態為 manual，並在 UI 隱藏 smart 模式選項
             const [activeTab, setActiveTab] = useState('manual'); 
@@ -1270,7 +1249,6 @@
             const [manualData, setManualData] = useState({ name: '', serial: '', expiry: '', note: '' });
             const [manualTags, setManualTags] = useState([]);
             const [images, setImages] = useState([]);
-            const [urlInput, setUrlInput] = useState('');
 
             const handleSmartSubmit = async () => {
                 if (!pasteVal.trim()) return;
@@ -1282,12 +1260,9 @@
                 } catch (e) { alert("處理失敗"); } finally { setLoading(false); }
             };
 
-            const handleManualSubmit = async () => {
+            const handleManualSubmit = () => {
                 if (!manualData.name) { alert("請輸入名稱"); return; }
-                const newTicket = { id: Date.now(), productName: manualData.name, serial: manualData.serial, expiry: manualData.expiry.replace(/-/g, '/'), note: manualData.note, images: images, image: images[0] || '', tags: manualTags, completed: false, isDeleted: false, createdAt: Date.now() };
-                
-                // [CR-006] 更新歷史邏輯，傳遞原圖與名稱，交由 App 層處理縮圖與儲存
-                onAddBatch([newTicket], true); // true flag to indicate manual add with history update intention
+                onAddBatch([{ id: Date.now(), productName: manualData.name, serial: manualData.serial, expiry: manualData.expiry.replace(/-/g, '/'), note: manualData.note, images: images, image: images[0] || '', tags: manualTags, completed: false, isDeleted: false, createdAt: Date.now() }]);
                 onClose();
             };
 
@@ -1297,26 +1272,6 @@
                     try { const base64 = await compressImage(file); setImages([base64]); } catch(err) { alert("處理圖片時發生錯誤：" + err.message); }
                 }
             };
-            
-            // [CR-006] 網址上傳
-            const handleUrlLoad = async () => {
-                if(!urlInput) return;
-                try {
-                    setLoading(true);
-                    const base64 = await compressImage(urlInput); 
-                    setImages([base64]); 
-                    setUrlInput('');
-                } catch(e) {
-                    alert("無法讀取此圖片網址 (可能受限於網站 CORS 安全政策)，請嘗試下載後上傳。");
-                } finally {
-                    setLoading(false);
-                }
-            };
-
-            const handleHistorySelect = (item) => {
-                setManualData(prev => ({ ...prev, name: item.name }));
-                if (item.thumb) setImages([item.thumb]); // Use thumbnail as placeholder or actual image if low res
-            };
 
             return (
                 <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-end sm:items-center justify-center animate-fade-in backdrop-blur-sm" onClick={onClose}>
@@ -1325,41 +1280,7 @@
                         {/* [CR-005] 隱藏模式切換 Tab 與智慧解析介面，僅保留手動輸入 */}
                         {activeTab === 'manual' && (
                             <div className="space-y-3">
-                                <div className="flex gap-2">
-                                     <div className="w-20 h-20 shrink-0 bg-slate-50 border border-dashed border-slate-300 rounded-2xl flex items-center justify-center relative overflow-hidden group">
-                                         {images.length > 0 ? <img src={images[0]} className="w-full h-full object-cover"/> : <ImageIcon className="text-slate-300"/>}
-                                         <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" onChange={handleImageUpload}/>
-                                         {loading && <div className="absolute inset-0 bg-white/50 flex items-center justify-center"><Loader2 className="animate-spin text-sky-500"/></div>}
-                                     </div>
-                                     <div className="flex-1 space-y-2">
-                                         <div className="text-xs font-bold text-slate-400">票券圖片</div>
-                                         <div className="flex gap-2">
-                                             <input value={urlInput} onChange={e=>setUrlInput(e.target.value)} placeholder="或貼上圖片網址..." className="flex-1 p-2 bg-slate-50 rounded-xl text-xs outline-none border-none"/>
-                                             <button onClick={handleUrlLoad} disabled={!urlInput} className="px-3 bg-slate-100 text-slate-500 rounded-xl text-xs font-bold hover:bg-sky-100 hover:text-sky-600"><Download size={14}/></button>
-                                         </div>
-                                     </div>
-                                </div>
-                                
-                                {/* [CR-006] 歷史紀錄區 */}
-                                {ticketHistory && ticketHistory.length > 0 && (
-                                    <div className="py-2">
-                                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">常用票券</div>
-                                        <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2">
-                                            {ticketHistory.map((item, idx) => (
-                                                <div key={idx} className="relative group shrink-0">
-                                                    <button onClick={() => handleHistorySelect(item)} className="flex flex-col items-center gap-1 w-16">
-                                                        <div className="w-12 h-12 rounded-xl bg-slate-50 border border-slate-100 overflow-hidden">
-                                                            {item.thumb ? <img src={item.thumb} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><Tag size={12} className="text-slate-300"/></div>}
-                                                        </div>
-                                                        <span className="text-[9px] font-bold text-slate-500 w-full text-center truncate px-1">{item.name}</span>
-                                                    </button>
-                                                    <button onClick={(e) => { e.stopPropagation(); onDeleteHistory(item.name); }} className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"><X size={8}/></button>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-
+                                <div className="flex items-center gap-3"><div className="w-20 h-20 bg-slate-50 border border-dashed border-slate-300 rounded-2xl flex items-center justify-center relative overflow-hidden">{images.length > 0 ? <img src={images[0]} className="w-full h-full object-cover"/> : <ImageIcon className="text-slate-300"/>}<input type="file" className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" onChange={handleImageUpload}/></div><div className="flex-1 text-xs font-bold text-slate-400">上傳票券照片 (選填)</div></div>
                                 <input className="w-full p-3.5 bg-slate-50 rounded-xl outline-none font-bold" placeholder="票券名稱 (必填)" value={manualData.name} onChange={e=>setManualData({...manualData, name: e.target.value})}/>
                                 <TagSelectInput allTags={allTags} selectedTags={manualTags} onTagsChange={setManualTags} extraSuggestions={specificViewKeywords} />
                                 <input className="w-full p-3.5 bg-slate-50 rounded-xl outline-none font-mono text-sm" placeholder="序號/代碼" value={manualData.serial} onChange={e=>setManualData({...manualData, serial: e.target.value})}/>
@@ -1404,140 +1325,19 @@
             );
         };
         
-        // [CR-007] 重構 BatchEditModal 以支援更豐富的編輯功能與歷史資料
-        const BatchEditModal = ({ isOpen, onClose, selectedCount, onBatchUpdate, allTags, ticketHistory, onDeleteHistory }) => {
-             const [editName, setEditName] = useState('');
-             const [editExpiry, setEditExpiry] = useState('');
-             const [editImage, setEditImage] = useState('');
+        const BatchEditModal = ({ isOpen, onClose, selectedCount, onAddTag, allTags }) => {
              const [tagsToAdd, setTagsToAdd] = useState([]);
-             const [urlInput, setUrlInput] = useState('');
-             const [loading, setLoading] = useState(false);
-             const [saveToHistory, setSaveToHistory] = useState(false);
-
-             useEffect(() => {
-                 if (isOpen) {
-                     // Reset state on open
-                     setEditName(''); setEditExpiry(''); setEditImage(''); setTagsToAdd([]); setUrlInput(''); setSaveToHistory(false);
-                 }
-             }, [isOpen]);
-
              if(!isOpen) return null;
-
-             const handleConfirm = () => { 
-                 onBatchUpdate({ name: editName, expiry: editExpiry, image: editImage, tagsToAdd: tagsToAdd, saveToHistory: saveToHistory }); 
-                 onClose(); 
-             };
-
-             const handleImageUpload = async (e) => {
-                const file = e.target.files[0];
-                if(file) {
-                    try { const base64 = await compressImage(file); setEditImage(base64); } catch(err) { alert("處理圖片時發生錯誤：" + err.message); }
-                }
-             };
-
-             const handleUrlLoad = async () => {
-                if(!urlInput) return;
-                try {
-                    setLoading(true);
-                    const base64 = await compressImage(urlInput); 
-                    setEditImage(base64); 
-                    setUrlInput('');
-                } catch(e) {
-                    alert("無法讀取此圖片網址 (可能受限於網站 CORS 安全政策)，請嘗試下載後上傳。");
-                } finally {
-                    setLoading(false);
-                }
-             };
-
-             const handleHistorySelect = (item) => {
-                 setEditName(item.name);
-                 if (item.thumb) setEditImage(item.thumb);
-             };
-
+             const handleConfirm = () => { onAddTag(tagsToAdd); onClose(); };
              return (
                 <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-end sm:items-center justify-center animate-fade-in" onClick={onClose}>
-                     <div className="bg-white w-full sm:w-[450px] sm:rounded-3xl rounded-t-[32px] p-6 shadow-2xl max-h-[90vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
-                        <div className="flex justify-between items-center mb-1">
-                            <h2 className="text-xl font-black text-slate-800">批量編輯</h2>
-                            <button onClick={onClose} className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200"><X size={18}/></button>
-                        </div>
+                     <div className="bg-white w-full sm:w-[400px] sm:rounded-3xl rounded-t-[32px] p-6 shadow-2xl" onClick={e=>e.stopPropagation()}>
+                        <h2 className="text-xl font-black mb-1 text-slate-800">批量編輯</h2>
                         <p className="text-xs font-bold text-slate-400 mb-4">已選取 {selectedCount} 張票券</p>
-                        
-                        <div className="space-y-5">
-                            {/* 歷史資料區塊 */}
-                            {ticketHistory && ticketHistory.length > 0 && (
-                                <div>
-                                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">常用票券 (快速帶入)</div>
-                                    <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2">
-                                        {ticketHistory.map((item, idx) => (
-                                            <div key={idx} className="relative group shrink-0">
-                                                <button onClick={() => handleHistorySelect(item)} className="flex flex-col items-center gap-1 w-16">
-                                                    <div className="w-12 h-12 rounded-xl bg-slate-50 border border-slate-100 overflow-hidden">
-                                                        {item.thumb ? <img src={item.thumb} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><Tag size={12} className="text-slate-300"/></div>}
-                                                    </div>
-                                                    <span className="text-[9px] font-bold text-slate-500 w-full text-center truncate px-1">{item.name}</span>
-                                                </button>
-                                                <button onClick={(e) => { e.stopPropagation(); onDeleteHistory(item.name); }} className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"><X size={8}/></button>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* 圖片上傳區塊 */}
-                            <div>
-                                <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">統一修改圖片</label>
-                                <div className="flex gap-2">
-                                     <div className="w-20 h-20 shrink-0 bg-slate-50 border border-dashed border-slate-300 rounded-2xl flex items-center justify-center relative overflow-hidden group">
-                                         {editImage ? <img src={editImage} className="w-full h-full object-cover"/> : <ImageIcon className="text-slate-300"/>}
-                                         <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" onChange={handleImageUpload}/>
-                                         {loading && <div className="absolute inset-0 bg-white/50 flex items-center justify-center"><Loader2 className="animate-spin text-sky-500"/></div>}
-                                     </div>
-                                     <div className="flex-1 space-y-2">
-                                         <div className="text-[10px] text-slate-400">若不修改請保持空白</div>
-                                         <div className="flex gap-2">
-                                             <input value={urlInput} onChange={e=>setUrlInput(e.target.value)} placeholder="或貼上圖片網址..." className="flex-1 p-2 bg-slate-50 rounded-xl text-xs outline-none border-none"/>
-                                             <button onClick={handleUrlLoad} disabled={!urlInput} className="px-3 bg-slate-100 text-slate-500 rounded-xl text-xs font-bold hover:bg-sky-100 hover:text-sky-600"><Download size={14}/></button>
-                                         </div>
-                                     </div>
-                                </div>
-                            </div>
-
-                            {/* 基本資訊區塊 */}
-                            <div className="space-y-3">
-                                <div>
-                                    <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">統一修改名稱</label>
-                                    <input className="w-full p-3 bg-slate-50 rounded-xl outline-none font-bold text-sm placeholder:text-slate-300" placeholder="若不修改請留空..." value={editName} onChange={e=>setEditName(e.target.value)}/>
-                                </div>
-                                <div>
-                                    <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">統一修改期限</label>
-                                    <input type="date" className="w-full p-3 bg-slate-50 rounded-xl outline-none text-sm font-bold text-slate-600" value={editExpiry} onChange={e=>setEditExpiry(e.target.value)}/>
-                                    <p className="text-[10px] text-slate-300 mt-1 pl-1">若不修改請留空</p>
-                                </div>
-                            </div>
-
-                            {/* 標籤區塊 */}
-                            <div>
-                                <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">批量新增標籤</label>
-                                <TagSelectInput allTags={allTags} selectedTags={tagsToAdd} onTagsChange={setTagsToAdd} />
-                            </div>
-
-                            {/* 歷史儲存選項 */}
-                            <div className="pt-2 border-t border-slate-100">
-                                <label className="flex items-center gap-3 p-3 bg-slate-50 rounded-2xl cursor-pointer hover:bg-sky-50 transition-colors">
-                                    <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${saveToHistory ? 'bg-sky-500 border-sky-500' : 'border-slate-300 bg-white'}`}>
-                                        {saveToHistory && <Check size={14} className="text-white"/>}
-                                    </div>
-                                    <input type="checkbox" className="hidden" checked={saveToHistory} onChange={e => setSaveToHistory(e.target.checked)}/>
-                                    <div className="flex-1">
-                                        <div className="text-sm font-bold text-slate-700">另存為常用票券</div>
-                                        <div className="text-[10px] text-slate-400">勾選後將自動製作縮圖並存入歷史紀錄</div>
-                                    </div>
-                                </label>
-                            </div>
+                        <div className="space-y-4">
+                            <div><label className="text-xs font-bold text-slate-500 uppercase mb-2 block">新增標籤</label><TagSelectInput allTags={allTags} selectedTags={tagsToAdd} onTagsChange={setTagsToAdd} /></div>
                         </div>
-
-                        <div className="flex gap-3 mt-6"><button onClick={onClose} className="flex-1 py-3 bg-slate-100 font-bold rounded-2xl text-slate-500">取消</button><button onClick={handleConfirm} className="flex-1 py-3 bg-sky-500 font-bold rounded-2xl text-white shadow-lg shadow-sky-200 hover:bg-sky-600 transition-colors">確認變更</button></div>
+                        <div className="flex gap-3 mt-6"><button onClick={onClose} className="flex-1 py-3 bg-slate-100 font-bold rounded-2xl text-slate-500">取消</button><button onClick={handleConfirm} className="flex-1 py-3 bg-sky-500 font-bold rounded-2xl text-white shadow-lg shadow-sky-200 hover:bg-sky-600 transition-colors">確認儲存</button></div>
                      </div>
                 </div>
              );
@@ -1571,10 +1371,6 @@
                 }
             });
             const [bgHistory, setBgHistory] = useState([]);
-            
-            // [CR-006] 票券歷史 State
-            const [ticketHistory, setTicketHistory] = useState([]);
-            
             const [showSettings, setShowSettings] = useState(false);
             const [showTagManager, setShowTagManager] = useState(false);
             const [isDataLoaded, setIsDataLoaded] = useState(false);
@@ -1602,8 +1398,6 @@
                         const dbTasks = await dbHelper.getItem('wallet_tasks_v3');
                         const dbSettings = await dbHelper.getItem('wallet_settings_v3');
                         const dbBgHistory = await dbHelper.getItem('wallet_bg_history_v3');
-                        // [CR-006] 讀取歷史
-                        const dbTicketHistory = await dbHelper.getItem('wallet_ticket_history_v3');
 
                         if (dbTasks) setTasks(dbTasks);
                         if (dbSettings) {
@@ -1620,7 +1414,6 @@
                             setSettings(mergedSettings);
                         }
                         if (dbBgHistory) setBgHistory(dbBgHistory);
-                        if (dbTicketHistory) setTicketHistory(dbTicketHistory);
                         setIsDataLoaded(true);
                     } catch (err) { console.error("Database initialization failed:", err); }
                 };
@@ -1630,8 +1423,6 @@
             useEffect(() => { if (isDataLoaded) dbHelper.setItem('wallet_tasks_v3', tasks); }, [tasks, isDataLoaded]);
             useEffect(() => { if (isDataLoaded) dbHelper.setItem('wallet_settings_v3', settings); }, [settings, isDataLoaded]);
             useEffect(() => { if (isDataLoaded) dbHelper.setItem('wallet_bg_history_v3', bgHistory); }, [bgHistory, isDataLoaded]);
-            // [CR-006] 儲存歷史
-            useEffect(() => { if (isDataLoaded) dbHelper.setItem('wallet_ticket_history_v3', ticketHistory); }, [ticketHistory, isDataLoaded]);
 
             useEffect(() => {
                 const checkNotifications = async () => {
@@ -1700,32 +1491,7 @@
                 return result;
             }, [tasks, view, activeTag, searchQuery, sortType, duplicateSerials, settings.notifyDays]);
 
-            const handleAddBatch = async (newItems, updateHistory = false) => {
-                setTasks(prev => [...newItems, ...prev]);
-                
-                // [CR-006] 自動更新歷史邏輯
-                if (updateHistory && newItems.length === 1) {
-                    const item = newItems[0];
-                    if (item.productName) {
-                        let thumb = '';
-                        if (item.image) {
-                            thumb = await createThumbnail(item.image, 100);
-                        }
-                        setTicketHistory(prev => {
-                            const filtered = prev.filter(p => p.name !== item.productName);
-                            return [{ name: item.productName, thumb: thumb, lastUsed: Date.now() }, ...filtered].slice(0, 20);
-                        });
-                    }
-                }
-            };
-
-            // [CR-006] 刪除歷史邏輯
-            const handleDeleteHistory = (name) => {
-                if(confirm(`確定要移除「${name}」的紀錄嗎？`)) {
-                    setTicketHistory(prev => prev.filter(item => item.name !== name));
-                }
-            };
-
+            const handleAddBatch = (newItems) => setTasks(prev => [...newItems, ...prev]);
             const handleUpdate = (updatedTicket) => setTasks(prev => prev.map(t => t.id === updatedTicket.id ? updatedTicket : t));
             
             const handleToggleComplete = async (ticket) => {
@@ -1800,7 +1566,6 @@
                         await dbHelper.removeItem('wallet_tasks_v3');
                         await dbHelper.removeItem('wallet_settings_v3');
                         await dbHelper.removeItem('wallet_bg_history_v3');
-                        await dbHelper.removeItem('wallet_ticket_history_v3');
                         localStorage.removeItem('last_notify_date_v3');
                         window.location.reload();
                     }
@@ -1809,45 +1574,7 @@
             
             const handleSelect = (id) => { const s = new Set(selectedIds); if(s.has(id)) s.delete(id); else s.add(id); setSelectedIds(s); };
             const handleSelectAll = () => setSelectedIds(selectedIds.size === filteredTasks.length ? new Set() : new Set(filteredTasks.map(t => t.id)));
-            
-            // [CR-007] 升級為 handleBatchUpdate，支援部分更新與歷史存入
-            const handleBatchUpdate = async (updates) => {
-                const { name, expiry, image, tagsToAdd, saveToHistory } = updates;
-                
-                setTasks(prev => prev.map(t => {
-                    if (!selectedIds.has(t.id)) return t;
-                    let newT = { ...t };
-                    if (name) newT.productName = name;
-                    if (expiry) newT.expiry = expiry.replace(/-/g, '/');
-                    if (image) {
-                        newT.image = image;
-                        newT.images = [image, ...(newT.images || [])];
-                    }
-                    if (tagsToAdd && tagsToAdd.length > 0) {
-                        newT.tags = Array.from(new Set([...(newT.tags || []), ...tagsToAdd]));
-                    }
-                    return newT;
-                }));
-
-                // 處理歷史儲存
-                if (saveToHistory && name) {
-                    let thumb = '';
-                    // 若有新圖片則使用新圖片製作縮圖，否則嘗試使用第一張被選取票券的圖片（如果只有選一張的話），
-                    // 但批量操作邏輯上若未上傳新圖，則無法為歷史記錄產生有效縮圖，故僅當 image 存在時製作。
-                    if (image) {
-                        thumb = await createThumbnail(image, 100);
-                    }
-                    
-                    setTicketHistory(prev => {
-                        const filtered = prev.filter(p => p.name !== name);
-                        return [{ name: name, thumb: thumb, lastUsed: Date.now() }, ...filtered].slice(0, 20);
-                    });
-                }
-
-                setSelectedIds(new Set());
-                setIsSelectionMode(false);
-            };
-
+            const handleBatchAddTag = (tagsToAdd) => { setTasks(prev => prev.map(t => selectedIds.has(t.id) ? { ...t, tags: Array.from(new Set([...(t.tags || []), ...tagsToAdd])) } : t)); setSelectedIds(new Set()); setIsSelectionMode(false); };
             const handleSaveSettings = (newSettings) => {
                 setSettings(newSettings);
                 const imagesToAdd = [newSettings.viewConfigs.active.backgroundImage, newSettings.viewConfigs.completed.backgroundImage, newSettings.viewConfigs.deleted.backgroundImage].filter(Boolean);
@@ -1887,17 +1614,16 @@
                         
                         {isSelectionMode ? (
                             <div className="fixed bottom-10 left-1/2 -translate-x-1/2 flex gap-3 z-40 animate-slide-up">
-                                {selectedIds.size > 0 && <><button onClick={() => setShowBatchModal(true)} className="bg-sky-500 hover:bg-sky-600 text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-sky-200 flex items-center gap-2"><Tag size={18}/> 批量編輯</button><button onClick={() => { if(confirm(`確定刪除 ${selectedIds.size} 項目？`)) { if(view === 'deleted') setTasks(prev => prev.filter(t => !selectedIds.has(t.id))); else { const now = Date.now(); setTasks(prev => prev.map(t => selectedIds.has(t.id) ? { ...t, isDeleted: true, deletedAt: now } : t)); } setSelectedIds(new Set()); setIsSelectionMode(false); } }} className="bg-white text-red-500 border border-red-100 px-4 py-3 rounded-2xl font-bold shadow-lg flex items-center gap-2 hover:bg-red-50"><Trash2 size={18}/></button></>}
+                                {selectedIds.size > 0 && <><button onClick={() => setShowBatchModal(true)} className="bg-sky-500 hover:bg-sky-600 text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-sky-200 flex items-center gap-2"><Tag size={18}/> 批量標籤</button><button onClick={() => { if(confirm(`確定刪除 ${selectedIds.size} 項目？`)) { if(view === 'deleted') setTasks(prev => prev.filter(t => !selectedIds.has(t.id))); else { const now = Date.now(); setTasks(prev => prev.map(t => selectedIds.has(t.id) ? { ...t, isDeleted: true, deletedAt: now } : t)); } setSelectedIds(new Set()); setIsSelectionMode(false); } }} className="bg-white text-red-500 border border-red-100 px-4 py-3 rounded-2xl font-bold shadow-lg flex items-center gap-2 hover:bg-red-50"><Trash2 size={18}/></button></>}
                                 <button onClick={() => {setIsSelectionMode(false); setSelectedIds(new Set());}} className="bg-slate-800 text-white px-4 py-3 rounded-2xl font-bold shadow-lg">取消</button>
                             </div>
                         ) : <button onClick={() => setShowAddModal(true)} className="fixed bottom-10 right-5 w-16 h-16 bg-sky-500 text-white rounded-[24px] shadow-2xl flex items-center justify-center text-3xl active:scale-90 transition-transform z-40"><Plus size={32}/></button>}
 
-                        <AddTicketModal isOpen={showAddModal} onClose={() => setShowAddModal(false)} onAddBatch={handleAddBatch} allTags={allTags} specificViewKeywords={settings.specificViewKeywords} ticketHistory={ticketHistory} onDeleteHistory={handleDeleteHistory} />
+                        <AddTicketModal isOpen={showAddModal} onClose={() => setShowAddModal(false)} onAddBatch={handleAddBatch} allTags={allTags} specificViewKeywords={settings.specificViewKeywords} />
                         <RedeemModal ticket={selectedTicket} onClose={() => setSelectedTicket(null)} onToggleComplete={handleToggleComplete} onDelete={handleDelete} onRestore={handleRestore} onUpdate={handleUpdate} allTags={allTags} specificViewKeywords={settings.specificViewKeywords} />
                         <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} settings={settings} bgHistory={bgHistory} onSave={handleSaveSettings} onRemoveHistory={handleRemoveHistory} onAddToHistory={handleAddToHistory} />
                         <TagManagerModal isOpen={showTagManager} onClose={() => setShowTagManager(false)} tags={allTags} onDeleteTag={handleDeleteTag} />
-                        {/* [CR-007] 更新 BatchEditModal Props */}
-                        <BatchEditModal isOpen={showBatchModal} onClose={() => setShowBatchModal(false)} selectedCount={selectedIds.size} onBatchUpdate={handleBatchUpdate} allTags={allTags} ticketHistory={ticketHistory} onDeleteHistory={handleDeleteHistory} />
+                        <BatchEditModal isOpen={showBatchModal} onClose={() => setShowBatchModal(false)} selectedCount={selectedIds.size} onAddTag={handleBatchAddTag} allTags={allTags} />
                         
                         <DataActionsModal isOpen={showDataModal} onClose={() => setShowDataModal(false)} onBackup={handleBackup} onImportClick={handleImportClick} onReset={handleFullReset} />
                         <ImportConfirmModal isOpen={!!importPendingData} data={importPendingData} onCancel={() => setImportPendingData(null)} onConfirm={executeImport} />
@@ -1911,5 +1637,3 @@
     </script>
 </body>
 </html>
-
-
