@@ -113,7 +113,7 @@
             ImagePlus, Heart, HeartHandshake, Eye, EyeOff, Globe, BookOpen, Star, History, MousePointerClick, Layers,
             CalendarX2, CopyPlus, Lightbulb, Loader2, QrCode, SlidersHorizontal, ArrowUpDown, Image, CheckCheck, SendHorizontal, XCircle, Droplets,
             MoveVertical, BoxSelect, Monitor, Palette, Rows, LayoutGrid, ChevronRight, ChevronDown as ChevronDownIcon,
-            PanelTop, PaintBucket, Maximize, Move, Eye as PreviewIcon, Info, MapPin, DatabaseBackup, ArchiveRestore, Eraser, Settings2
+            PanelTop, PaintBucket, Maximize, Move, Eye as PreviewIcon, Info, MapPin, DatabaseBackup, ArchiveRestore, Eraser, Settings2, ArrowLeft
         } from 'lucide-react';
 
         // --- 1. Core Logic (Helpers & DB) ---
@@ -1312,18 +1312,19 @@
                         
                         {/* [CR-013] 全螢幕提示 */}
                         {!ticket.originalImage && (
-                            <div className="absolute top-20 left-1/2 -translate-x-1/2 bg-black/60 text-white/70 px-4 py-2 rounded-xl text-xs font-bold backdrop-blur-md border border-white/10">
+                            <div className="absolute bottom-32 left-1/2 -translate-x-1/2 bg-black/60 text-white/70 px-4 py-2 rounded-xl text-xs font-bold backdrop-blur-md border border-white/10 text-center">
                                 目前顯示縮圖，建議更換為核銷原圖
                             </div>
                         )}
 
                         {/* [CR-018] 底部操作按鈕列：解決原圖遮擋問題 */}
-                        <div className="absolute bottom-0 left-0 right-0 p-6 flex gap-4 justify-center items-end bg-gradient-to-t from-black/90 via-black/50 to-transparent pt-16">
+                        <div className="absolute bottom-0 left-0 right-0 p-6 flex gap-4 justify-center items-end bg-gradient-to-t from-black/90 via-black/50 to-transparent pt-24 pb-8">
+                            {/* [CR-019] 左下角關閉按鈕改為「回列表」 */}
                             <button 
-                                onClick={(e) => { e.stopPropagation(); setShowFullScreen(false); }}
-                                className="px-6 py-3.5 bg-white/10 backdrop-blur-md border border-white/20 text-white rounded-2xl font-bold flex items-center gap-2 active:scale-95 transition-all shadow-lg"
+                                onClick={(e) => { e.stopPropagation(); onClose(); }}
+                                className="px-6 py-4 bg-white/10 backdrop-blur-md border border-white/20 text-white rounded-2xl font-bold flex items-center gap-2 active:scale-95 transition-all shadow-lg hover:bg-white/20"
                             >
-                                <X size={20}/> 關閉
+                                <ArrowLeft size={20}/> 回列表
                             </button>
                             {!ticket.isDeleted && (
                                 <button 
@@ -1331,10 +1332,9 @@
                                         e.stopPropagation(); 
                                         if(ticket.completed || window.confirm("確定核銷？")) { 
                                             onToggleComplete(ticket); 
-                                            // 可選擇是否自動關閉，這裡保留開啟以便確認狀態
                                         } 
                                     }} 
-                                    className={`flex-1 max-w-[200px] py-3.5 rounded-2xl font-black shadow-xl flex items-center justify-center gap-2 active:scale-95 transition-all ${ticket.completed ? 'bg-slate-600 text-white/80 border border-white/10' : 'bg-emerald-500 text-white hover:bg-emerald-400'}`}
+                                    className={`flex-1 max-w-[200px] py-4 rounded-2xl font-black shadow-xl flex items-center justify-center gap-2 active:scale-95 transition-all ${ticket.completed ? 'bg-slate-600 text-white/80 border border-white/10' : 'bg-emerald-500 text-white hover:bg-emerald-400'}`}
                                 >
                                     {ticket.completed ? <><RotateCcw size={20}/> 已核銷 (還原)</> : <><CheckCircle2 size={20}/> 立即核銷</>}
                                 </button>
