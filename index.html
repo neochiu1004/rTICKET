@@ -170,7 +170,7 @@
             }
         };
 
-        const compressImage = (fileOrUrl) => {
+        const compressImage = (fileOrUrl, type = 'thumbnail') => {
             return new Promise((resolve, reject) => {
                 const img = new window.Image();
                 img.crossOrigin = "Anonymous";
@@ -188,13 +188,23 @@
                     let width = img.width; 
                     let height = img.height;
                     
+                    if (type === 'thumbnail') {
+                        const max = 800;
+                        if (width > max || height > max) {
+                            const ratio = width / height;
+                            if (width > height) { width = max; height = max / ratio; }
+                            else { height = max; width = max * ratio; }
+                        }
+                    }
+
                     canvas.width = width; canvas.height = height;
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0, width, height);
                     
                     if (objectUrl) URL.revokeObjectURL(objectUrl);
                     
-                    resolve(canvas.toDataURL('image/webp', 0.8));
+                    const quality = type === 'original' ? 0.92 : 0.7;
+                    resolve(canvas.toDataURL('image/webp', quality));
                 };
                 
                 img.onerror = (err) => {
@@ -420,7 +430,7 @@
                 const file = e.target.files[0];
                 if(file) {
                     try {
-                        const base64 = await compressImage(file);
+                        const base64 = await compressImage(file, 'original');
                         handleViewConfigChange('headerBackgroundImage', base64);
                     } catch(err) { alert("處理圖片時發生錯誤：" + err.message); }
                 }
@@ -430,7 +440,7 @@
                 const file = e.target.files[0];
                 if(file) {
                     try {
-                        const base64 = await compressImage(file);
+                        const base64 = await compressImage(file, 'original');
                         if(onAddToHistory) onAddToHistory(base64); 
                     } catch(err) { alert("處理圖片時發生錯誤：" + err.message); }
                 }
@@ -1039,6 +1049,7 @@
             const [editExpiry, setEditExpiry] = useState(ticket.expiry);
             const [editTags, setEditTags] = useState(ticket.tags || []);
             const [editImage, setEditImage] = useState(ticket.image || '');
+            const [editOriginalImage, setEditOriginalImage] = useState(ticket.originalImage || '');
             
             // [CR-003] 確保當 ticket Prop 變更時，強制同步編輯狀態
             useEffect(() => {
@@ -1047,6 +1058,7 @@
                     setEditExpiry(ticket.expiry);
                     setEditTags(ticket.tags || []);
                     setEditImage(ticket.image || '');
+                    setEditOriginalImage(ticket.originalImage || '');
                 }
             }, [ticket]);
 
@@ -1069,7 +1081,7 @@
             const handleSave = () => {
                 onUpdate({
                     ...ticket, productName: editName, expiry: editExpiry.replace(/-/g, '/'),
-                    tags: editTags, image: editImage,
+                    tags: editTags, image: editImage, originalImage: editOriginalImage,
                     images: editImage ? (ticket.images && ticket.images.includes(editImage) ? ticket.images : [editImage, ...(ticket.images || [])]) : ticket.images
                 });
                 setIsEditing(false);
@@ -1108,10 +1120,26 @@
                                                 </div>
                                             </div>
                                         )}
-                                        <div><label className="text-[10px] font-bold text-slate-400 uppercase">封面</label><div className="flex items-center gap-3 mt-1">{editImage ? <img src={editImage} className="w-12 h-12 object-cover rounded-lg border border-slate-200"/> : <div className="w-12 h-12 bg-white border border-dashed border-slate-300 rounded-lg flex items-center justify-center"><ImageIcon size={16} className="text-slate-300"/></div>}<label className="px-3 py-1 bg-sky-100 text-sky-600 text-[10px] font-bold rounded-md cursor-pointer">上傳 <input type="file" accept="image/*" onChange={async e => {
-                                                const file = e.target.files[0];
-                                                if(file) { const base64 = await compressImage(file); setEditImage(base64); }
-                                            }} className="hidden"/></label></div></div>
+                                        <div>
+                                            <label className="text-[10px] font-bold text-slate-400 uppercase">封面 (列表/範本用)</label>
+                                            <div className="flex items-center gap-3 mt-1">
+                                                {editImage ? <img src={editImage} className="w-12 h-12 object-cover rounded-lg border border-slate-200"/> : <div className="w-12 h-12 bg-white border border-dashed border-slate-300 rounded-lg flex items-center justify-center"><ImageIcon size={16} className="text-slate-300"/></div>}
+                                                <label className="px-3 py-1 bg-sky-100 text-sky-600 text-[10px] font-bold rounded-md cursor-pointer">上傳縮圖 <input type="file" accept="image/*" onChange={async e => {
+                                                    const file = e.target.files[0];
+                                                    if(file) { const base64 = await compressImage(file, 'thumbnail'); setEditImage(base64); }
+                                                }} className="hidden"/></label>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-bold text-slate-400 uppercase">核銷原圖 (全螢幕用)</label>
+                                            <div className="flex items-center gap-3 mt-1">
+                                                {editOriginalImage ? <img src={editOriginalImage} className="w-12 h-12 object-cover rounded-lg border border-slate-200"/> : <div className="w-12 h-12 bg-white border border-dashed border-slate-300 rounded-lg flex items-center justify-center"><Maximize2 size={16} className="text-slate-300"/></div>}
+                                                <label className="px-3 py-1 bg-emerald-100 text-emerald-600 text-[10px] font-bold rounded-md cursor-pointer">上傳原圖 <input type="file" accept="image/*" onChange={async e => {
+                                                    const file = e.target.files[0];
+                                                    if(file) { const base64 = await compressImage(file, 'original'); setEditOriginalImage(base64); }
+                                                }} className="hidden"/></label>
+                                            </div>
+                                        </div>
                                         <div>
                                             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">兌換期限</label>
                                             <input 
@@ -1143,7 +1171,7 @@
                                                     <X size={18}/>
                                                 </button>
                                                 <div className="relative w-full flex-1 min-h-0 flex items-center justify-center cursor-zoom-in" onClick={() => setShowFullScreen(true)}>
-                                                    <img src={ticket.image} className="max-h-full w-auto rounded-xl shadow-md border border-slate-100" />
+                                                    <img src={ticket.originalImage || ticket.image} className="max-h-full w-auto rounded-xl shadow-md border border-slate-100" />
                                                 </div>
                                                 {ticket.serial && (<div className="w-full space-y-2 shrink-0 pb-4"><div className="bg-white p-2 rounded-xl border border-slate-100"><BarcodeCanvas text={ticket.serial} /></div><div className="flex justify-center p-2 bg-white rounded-xl border border-slate-100 shrink-0"><QRCodeCanvas text={ticket.serial} size={100} /></div></div>)}
                                             </div>
@@ -1201,9 +1229,9 @@
                         </div>
                     </div>
                 </div>
-                {showFullScreen && ticket.image && (
+                {showFullScreen && (ticket.image || ticket.originalImage) && (
                     <div className="fixed inset-0 z-[60] bg-black flex items-center justify-center p-2 fullscreen-overlay" onClick={() => setShowFullScreen(false)}>
-                        <img src={ticket.image} className="max-w-full max-h-full object-contain" />
+                        <img src={ticket.originalImage || ticket.image} className="max-w-full max-h-full object-contain" />
                         <button className="absolute top-6 right-6 px-4 py-2 bg-black/60 backdrop-blur-md text-white rounded-full flex items-center gap-2 font-bold shadow-lg border border-white/20 active:scale-95 transition-transform" onClick={(e) => { e.stopPropagation(); setShowFullScreen(false); }}>
                             <X size={20}/> 關閉
                         </button>
@@ -1219,19 +1247,27 @@
             const [manualData, setManualData] = useState({ name: '', serial: '', expiry: '', note: '' });
             const [manualTags, setManualTags] = useState([]);
             const [images, setImages] = useState([]);
+            const [originalImage, setOriginalImage] = useState('');
 
             // [CR-009] 移除 handleSmartSubmit
 
             const handleManualSubmit = () => {
                 if (!manualData.name) { alert("請輸入名稱"); return; }
-                onAddBatch([{ id: Date.now(), productName: manualData.name, serial: manualData.serial, expiry: manualData.expiry.replace(/-/g, '/'), note: manualData.note, images: images, image: images[0] || '', tags: manualTags, completed: false, isDeleted: false, createdAt: Date.now() }]);
+                onAddBatch([{ id: Date.now(), productName: manualData.name, serial: manualData.serial, expiry: manualData.expiry.replace(/-/g, '/'), note: manualData.note, images: images, image: images[0] || '', originalImage: originalImage, tags: manualTags, completed: false, isDeleted: false, createdAt: Date.now() }]);
                 onClose();
             };
 
             const handleImageUpload = async (e) => {
                 const file = e.target.files[0];
                 if(file) {
-                    try { const base64 = await compressImage(file); setImages([base64]); } catch(err) { alert("處理圖片時發生錯誤：" + err.message); }
+                    try { const base64 = await compressImage(file, 'thumbnail'); setImages([base64]); } catch(err) { alert("處理圖片時發生錯誤：" + err.message); }
+                }
+            };
+
+            const handleOriginalImageUpload = async (e) => {
+                const file = e.target.files[0];
+                if(file) {
+                    try { const base64 = await compressImage(file, 'original'); setOriginalImage(base64); } catch(err) { alert("處理圖片時發生錯誤：" + err.message); }
                 }
             };
 
@@ -1266,7 +1302,23 @@
                                 </div>
                             )}
 
-                            <div className="flex items-center gap-3"><div className="w-20 h-20 bg-slate-50 border border-dashed border-slate-300 rounded-2xl flex items-center justify-center relative overflow-hidden">{images.length > 0 ? <img src={images[0]} className="w-full h-full object-cover"/> : <ImageIcon className="text-slate-300"/>}<input type="file" className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" onChange={handleImageUpload}/></div><div className="flex-1 text-xs font-bold text-slate-400">上傳票券照片 (選填)</div></div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="flex flex-col gap-1">
+                                    <div className="w-full aspect-square bg-slate-50 border border-dashed border-slate-300 rounded-2xl flex items-center justify-center relative overflow-hidden group">
+                                        {images.length > 0 ? <img src={images[0]} className="w-full h-full object-cover"/> : <div className="flex flex-col items-center text-slate-300 gap-1"><ImageIcon size={24}/><span className="text-[9px] font-bold">封面縮圖</span></div>}
+                                        <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" onChange={handleImageUpload}/>
+                                    </div>
+                                    <div className="text-[10px] font-bold text-center text-slate-400">列表顯示 (範本)</div>
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                    <div className="w-full aspect-square bg-slate-50 border border-dashed border-slate-300 rounded-2xl flex items-center justify-center relative overflow-hidden group">
+                                        {originalImage ? <img src={originalImage} className="w-full h-full object-cover"/> : <div className="flex flex-col items-center text-slate-300 gap-1"><Maximize2 size={24}/><span className="text-[9px] font-bold">核銷原圖</span></div>}
+                                        <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" onChange={handleOriginalImageUpload}/>
+                                    </div>
+                                    <div className="text-[10px] font-bold text-center text-slate-400">全螢幕 (不存範本)</div>
+                                </div>
+                            </div>
+
                             <input className="w-full p-3.5 bg-slate-50 rounded-xl outline-none font-bold" placeholder="票券名稱 (必填)" value={manualData.name} onChange={e=>setManualData({...manualData, name: e.target.value})}/>
                             <TagSelectInput allTags={allTags} selectedTags={manualTags} onTagsChange={setManualTags} extraSuggestions={specificViewKeywords} />
                             <input className="w-full p-3.5 bg-slate-50 rounded-xl outline-none font-mono text-sm" placeholder="序號/代碼" value={manualData.serial} onChange={e=>setManualData({...manualData, serial: e.target.value})}/>
@@ -1385,7 +1437,7 @@
                                         更換圖片
                                         <input type="file" className="hidden" accept="image/*" onChange={async e => {
                                             const file = e.target.files[0];
-                                            if(file) { const b64 = await compressImage(file); setNewImage(b64); }
+                                            if(file) { const b64 = await compressImage(file, 'thumbnail'); setNewImage(b64); }
                                         }} />
                                     </label>
                                     {newImage && <button onClick={()=>setNewImage('')} className="text-red-500 p-2"><Trash2 size={16}/></button>}
@@ -1757,4 +1809,3 @@
     </script>
 </body>
 </html>
-
