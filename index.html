@@ -1078,7 +1078,7 @@
             const [viewMode, setViewMode] = useState(getInitialViewMode());
             const [showFullScreen, setShowFullScreen] = useState(false);
 
-            // 當切換票券時，重置視圖與編輯狀態
+            // [CR-017] 自動全螢幕：若有原圖，開啟時自動全螢幕
             useEffect(() => {
                 if (ticket) {
                     setEditName(ticket.productName);
@@ -1087,6 +1087,15 @@
                     setEditImage(ticket.image || '');
                     setEditOriginalImage(ticket.originalImage || '');
                     setViewMode(getInitialViewMode());
+                    
+                    if (ticket.originalImage) {
+                        setShowFullScreen(true);
+                    } else {
+                        setShowFullScreen(false);
+                    }
+                } else {
+                    // Modal 關閉時重置狀態
+                    setShowFullScreen(false);
                 }
             }, [ticket]);
 
@@ -1200,7 +1209,14 @@
                                             <div className="flex bg-slate-100 p-1 rounded-xl mb-3">
                                                 <button onClick={()=>setViewMode('standard')} className={`px-4 py-1.5 rounded-lg text-[10px] font-bold transition-all ${viewMode === 'standard' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-400'}`}>條碼</button>
                                                 {hasAnyImage && (
-                                                    <button onClick={()=>setViewMode('image')} className={`px-4 py-1.5 rounded-lg text-[10px] font-bold transition-all relative flex items-center gap-1 ${viewMode === 'image' ? 'bg-white shadow-sm text-slate-800 font-black' : 'text-slate-400 font-bold'}`}>
+                                                    <button 
+                                                        onClick={() => {
+                                                            setViewMode('image');
+                                                            // [CR-017] 手動切換到原圖分頁時，若有原圖也觸發全螢幕
+                                                            if (ticket.originalImage) setShowFullScreen(true);
+                                                        }}
+                                                        className={`px-4 py-1.5 rounded-lg text-[10px] font-bold transition-all relative flex items-center gap-1 ${viewMode === 'image' ? 'bg-white shadow-sm text-slate-800 font-black' : 'text-slate-400 font-bold'}`}
+                                                    >
                                                         {ticket.originalImage && <div className="w-1 h-1 bg-sky-500 rounded-full animate-pulse"></div>} 原圖
                                                     </button>
                                                 )}
@@ -1862,6 +1878,7 @@
 
                         <AddTicketModal isOpen={showAddModal} onClose={() => setShowAddModal(false)} onAddBatch={handleAddBatch} allTags={allTags} specificViewKeywords={settings.specificViewKeywords} templates={templates} onDeleteTemplate={handleDeleteTemplate} />
                         {/* [CR-009] 將 templates 與 onDeleteTemplate 傳入 RedeemModal */}
+                        {/* [CR-017] 增加全螢幕自動觸發邏輯 */}
                         <RedeemModal ticket={selectedTicket} onClose={() => setSelectedTicket(null)} onToggleComplete={handleToggleComplete} onDelete={handleDelete} onRestore={handleRestore} onUpdate={handleUpdate} allTags={allTags} specificViewKeywords={settings.specificViewKeywords} onSaveTemplate={handleSaveTemplate} templates={templates} onDeleteTemplate={handleDeleteTemplate} />
                         <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} settings={settings} bgHistory={bgHistory} onSave={handleSaveSettings} onRemoveHistory={handleRemoveHistory} onAddToHistory={handleAddToHistory} />
                         <TagManagerModal isOpen={showTagManager} onClose={() => setShowTagManager(false)} tags={allTags} onDeleteTag={handleDeleteTag} />
