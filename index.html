@@ -1020,7 +1020,7 @@
             );
         };
 
-        const MomoTemplate = ({ ticket, onImageClick }) => {
+        const MomoTemplate = ({ ticket, onContentClick }) => {
             return (
                 <div className="w-full h-full flex flex-col bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-2xl animate-fade-in text-left">
                     <div className="bg-momo px-4 py-2.5 flex justify-between items-center text-white shrink-0">
@@ -1030,15 +1030,16 @@
                     <div className="flex-1 overflow-y-auto no-scrollbar">
                         <div className="p-3 space-y-3">
                             <div className="flex gap-3">
-                                {/* [CR-002] 綁定 onClick 觸發全螢幕檢視 */}
-                                <div onClick={onImageClick} className="w-20 h-20 shrink-0 border border-slate-100 rounded-lg overflow-hidden bg-slate-50 flex items-center justify-center cursor-zoom-in">{ticket.image ? <img src={ticket.image} className="w-full h-full object-cover" /> : <ImageIcon className="text-slate-200" size={24} />}</div>
+                                {/* [CR-020] MOMO模式點擊圖片直接回列表 */}
+                                <div onClick={onContentClick} className="w-20 h-20 shrink-0 border border-slate-100 rounded-lg overflow-hidden bg-slate-50 flex items-center justify-center cursor-pointer">{ticket.image ? <img src={ticket.image} className="w-full h-full object-cover" /> : <ImageIcon className="text-slate-200" size={24} />}</div>
                                 <div className="flex-1 min-w-0 flex flex-col justify-center"><h2 className="text-[15px] font-black text-slate-800 leading-tight line-clamp-2">{ticket.productName}</h2>
                                 </div>
                             </div>
                             <div className="relative border-t border-dashed border-slate-200 my-1"><div className="absolute -left-5 -top-1.5 w-3 h-3 bg-white rounded-full border border-slate-100"></div><div className="absolute -right-5 -top-1.5 w-3 h-3 bg-white rounded-full border border-slate-100"></div></div>
                             <div className="bg-slate-50/50 rounded-xl p-3 flex flex-col items-center gap-3">
-                                <div className="w-full px-2"><BarcodeCanvas text={ticket.serial} /></div>
-                                <div className="p-1.5 bg-white border border-slate-100 rounded-lg shadow-sm"><QRCodeCanvas text={ticket.serial} size={110} /></div>
+                                {/* [CR-020] MOMO模式點擊條碼直接回列表 */}
+                                <div onClick={onContentClick} className="w-full px-2 cursor-pointer"><BarcodeCanvas text={ticket.serial} /></div>
+                                <div onClick={onContentClick} className="p-1.5 bg-white border border-slate-100 rounded-lg shadow-sm cursor-pointer"><QRCodeCanvas text={ticket.serial} size={110} /></div>
                                 <div className="text-center"><p className="text-[10px] font-bold text-slate-400 mb-0.5">電子券號</p><p className="text-[13px] font-mono font-black text-slate-700 tracking-wider break-all px-4">{ticket.serial}</p></div>
                             </div>
                             <div className="space-y-1.5 px-1">
@@ -1254,11 +1255,13 @@
                                                 {ticket.serial && (<div className="w-full space-y-2 shrink-0 pb-4"><div className="bg-white p-2 rounded-xl border border-slate-100"><BarcodeCanvas text={ticket.serial} /></div><div className="flex justify-center p-2 bg-white rounded-xl border border-slate-100 shrink-0"><QRCodeCanvas text={ticket.serial} size={100} /></div></div>)}
                                             </div>
                                         ) : isMomoMode ? (
-                                            <div className="h-full py-1"><MomoTemplate ticket={ticket} onImageClick={() => setShowFullScreen(true)} /></div>
+                                            /* [CR-020] MOMO模式內容點擊回列表 */
+                                            <div className="h-full py-1"><MomoTemplate ticket={ticket} onContentClick={onClose} onImageClick={onClose} /></div>
                                         ) : (
                                             <div className="h-full flex flex-col items-center justify-center gap-5 py-4">
-                                                {ticket.serial && <div className="w-full bg-white p-3 rounded-xl border border-slate-100 shadow-sm"><BarcodeCanvas text={ticket.serial} /></div>}
-                                                <div className="p-4 bg-white rounded-[32px] shadow-sm border border-slate-100">{ticket.serial ? <QRCodeCanvas text={ticket.serial} size={180} /> : <div className="w-40 h-40 flex items-center justify-center text-slate-200 border-2 border-dashed rounded-2xl font-bold">無序號</div>}</div>
+                                                {/* [CR-020] 標準模式內容點擊回列表 */}
+                                                {ticket.serial && <div onClick={onClose} className="w-full bg-white p-3 rounded-xl border border-slate-100 shadow-sm cursor-pointer"><BarcodeCanvas text={ticket.serial} /></div>}
+                                                <div onClick={onClose} className="p-4 bg-white rounded-[32px] shadow-sm border border-slate-100 cursor-pointer">{ticket.serial ? <QRCodeCanvas text={ticket.serial} size={180} /> : <div className="w-40 h-40 flex items-center justify-center text-slate-200 border-2 border-dashed rounded-2xl font-bold">無序號</div>}</div>
                                                 <div className="text-center"><span className="text-[11px] font-bold text-slate-400 block mb-1">電子券號</span><span className="font-mono text-lg font-black text-slate-600 bg-slate-50 px-4 py-1 rounded-full">{ticket.serial || 'N/A'}</span></div>
                                             </div>
                                         )}
@@ -1307,7 +1310,10 @@
                     </div>
                 </div>
                 {showFullScreen && (ticket.image || ticket.originalImage) && (
-                    <div className="fixed inset-0 z-[60] bg-black flex items-center justify-center p-2 fullscreen-overlay" onClick={() => setShowFullScreen(false)}>
+                    <div className="fixed inset-0 z-[60] bg-black flex items-center justify-center p-2 fullscreen-overlay" 
+                        /* [CR-020] 全螢幕圖片點擊直接回列表 */
+                        onClick={() => onClose()}
+                    >
                         <img src={ticket.originalImage || ticket.image} className="max-w-full max-h-full object-contain" />
                         
                         {/* [CR-013] 全螢幕提示 */}
@@ -1318,13 +1324,13 @@
                         )}
 
                         {/* [CR-018] 底部操作按鈕列：解決原圖遮擋問題 */}
-                        <div className="absolute bottom-0 left-0 right-0 p-6 flex gap-4 justify-center items-end bg-gradient-to-t from-black/90 via-black/50 to-transparent pt-24 pb-8">
-                            {/* [CR-019] 左下角關閉按鈕改為「回列表」 */}
+                        <div className="absolute bottom-0 left-0 right-0 p-6 flex gap-4 justify-center items-end bg-gradient-to-t from-black/90 via-black/50 to-transparent pt-24 pb-8" onClick={e => e.stopPropagation()}>
+                            {/* [CR-019] 左下角關閉按鈕改為「回詳情」 */}
                             <button 
-                                onClick={(e) => { e.stopPropagation(); onClose(); }}
+                                onClick={(e) => { e.stopPropagation(); setShowFullScreen(false); }}
                                 className="px-6 py-4 bg-white/10 backdrop-blur-md border border-white/20 text-white rounded-2xl font-bold flex items-center gap-2 active:scale-95 transition-all shadow-lg hover:bg-white/20"
                             >
-                                <ArrowLeft size={20}/> 回列表
+                                <Maximize2 size={20} className="rotate-180"/> 回詳情
                             </button>
                             {!ticket.isDeleted && (
                                 <button 
