@@ -1338,6 +1338,7 @@
                                         e.stopPropagation(); 
                                         if(ticket.completed || window.confirm("確定核銷？")) { 
                                             onToggleComplete(ticket); 
+                                            onClose(); 
                                         } 
                                     }} 
                                     className={`flex-1 max-w-[200px] py-4 rounded-2xl font-black shadow-xl flex items-center justify-center gap-2 active:scale-95 transition-all ${ticket.completed ? 'bg-slate-600 text-white/80 border border-white/10' : 'bg-emerald-500 text-white hover:bg-emerald-400'}`}
@@ -1404,7 +1405,7 @@
                                         {templates.map(tpl => (
                                             <div key={tpl.id} onClick={() => applyTemplate(tpl)} className="shrink-0 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl p-1 pr-2 cursor-pointer hover:bg-slate-100 transition-colors group">
                                                     <div className="w-8 h-8 rounded-lg bg-white border border-slate-100 flex items-center justify-center overflow-hidden">
-                                                    {tpl.image ? <img src={tpl.image} className="w-full h-full object-cover"/> : <ImageIcon size={12} className="text-slate-300"/>}
+                                                    {tpl.image ? <img src={tpl.image} className="w-full h-full object-cover"/> : <ImageIcon size={12} className="text-sky-300"/>}
                                                     </div>
                                                     <span className="text-xs font-bold text-slate-600 max-w-[80px] truncate">{tpl.label}</span>
                                                     <button onClick={(e) => { e.stopPropagation(); onDeleteTemplate(tpl.id); }} className="text-sky-200 hover:text-red-500 p-0.5"><X size={12}/></button>
@@ -1922,5 +1923,3 @@
     </script>
 </body>
 </html>
-
-
